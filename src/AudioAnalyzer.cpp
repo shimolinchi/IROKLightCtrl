@@ -52,7 +52,9 @@ RgbColor AudioAnalyzer::Analyze(Sensitivity sensitivity, int maxBrightness) {
                       ? 0.0F
                       : std::clamp(gatedRms / peakEnvelope_, 0.0F, 1.0F);
     level = std::pow(level, 0.70F);
-    lastLevel_.store(level);
+    const float levelSmoothing = level > smoothLevel_ ? 0.58F : 0.18F;
+    smoothLevel_ += (level - smoothLevel_) * levelSmoothing;
+    lastLevel_.store(smoothLevel_);
 
     std::array<std::complex<float>, kFftSize> spectrum{};
     for (std::size_t index = 0; index < samples.size(); ++index) {
@@ -94,7 +96,7 @@ RgbColor AudioAnalyzer::Analyze(Sensitivity sensitivity, int maxBrightness) {
     green /= colorMax;
     blue /= colorMax;
 
-    const float brightness = level * (std::clamp(maxBrightness, 10, 100) / 100.0F);
+    const float brightness = smoothLevel_ * (std::clamp(maxBrightness, 10, 100) / 100.0F);
     red *= brightness * 255.0F;
     green *= brightness * 255.0F;
     blue *= brightness * 255.0F;

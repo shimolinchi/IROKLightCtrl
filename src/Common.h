@@ -46,6 +46,18 @@ enum class Sensitivity : int {
     High = 2,
 };
 
+enum class LightingMode : int {
+    Audio = 0,
+    Static = 1,
+    Breathing = 2,
+    ColorCycle = 3,
+};
+
+enum class AudioColorMode : int {
+    Spectrum = 0,
+    GradientCycle = 1,
+};
+
 inline std::wstring HResultMessage(HRESULT result) {
     wchar_t* message = nullptr;
     const DWORD size = FormatMessageW(

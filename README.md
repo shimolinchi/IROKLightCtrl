@@ -1,6 +1,6 @@
 # IROKLightCtrl
 
-IROKLightCtrl is a small, driverless Windows tray application that keeps an
+IROKLightCtrl is a small, driverless Windows control panel that keeps an
 IROK MG75 PRO keyboard and compatible PC chassis lighting in sync with system
 audio. It captures playback through WASAPI loopback, analyzes bass, mids, and
 treble with an FFT, then sends the same color frame to every enabled device.
@@ -34,9 +34,16 @@ The executable is written to `build\Release\IROKLightCtrl.exe`.
 
 ## Use
 
-Start `IROKLightCtrl.exe`; it runs only in the notification area. Right-click
-the tray icon to pause synchronization, reconnect devices, change sensitivity,
-enable startup, open Windows Dynamic Lighting settings, or inspect the log.
+Start `IROKLightCtrl.exe` to open the control panel. It provides live device
+status, lighting modes, brightness, speed, direction, two selectable colors,
+audio sensitivity, and either full-spectrum or custom color-range audio
+mapping. Closing the window keeps synchronization running in the notification
+area; right-click the tray icon to reopen it or exit.
+
+Available software lighting modes are Audio, Static, Breathing, and Color
+Cycle. Changes are applied live to the keyboard and chassis and saved
+automatically. Enabling startup launches the app with `--background`, so no
+window appears at sign-in.
 
 Settings and logs are stored in `%LOCALAPPDATA%\IROKLightCtrl`. The original
 keyboard lighting mode is restored when the app exits normally.

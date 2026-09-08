@@ -43,6 +43,16 @@ Settings Settings::Load() {
     std::filesystem::create_directories(path.parent_path());
     value.sensitivity = static_cast<Sensitivity>(
         std::clamp(ReadInt(path, L"Sensitivity", 1), 0, 2));
+    value.lightingMode = static_cast<LightingMode>(
+        std::clamp(ReadInt(path, L"LightingMode", 0), 0, 3));
+    value.audioColorMode = static_cast<AudioColorMode>(
+        std::clamp(ReadInt(path, L"AudioColorMode", 1), 0, 1));
+    value.primaryColor = RgbColor::FromPacked(
+        static_cast<std::uint32_t>(ReadInt(path, L"PrimaryColor", 0xff3070)));
+    value.secondaryColor = RgbColor::FromPacked(
+        static_cast<std::uint32_t>(ReadInt(path, L"SecondaryColor", 0x18b0ff)));
+    value.effectSpeed = std::clamp(ReadInt(path, L"EffectSpeed", 55), 1, 100);
+    value.reverseDirection = ReadInt(path, L"ReverseDirection", 0) != 0;
     value.frameIntervalMs = std::clamp(ReadInt(path, L"FrameIntervalMs", 50), 35, 100);
     value.maxBrightness = std::clamp(ReadInt(path, L"MaxBrightness", 100), 10, 100);
     value.keyboardEnabled = ReadInt(path, L"KeyboardEnabled", 1) != 0;
@@ -58,6 +68,12 @@ void Settings::Save() const {
     const auto path = FilePath();
     std::filesystem::create_directories(path.parent_path());
     WriteInt(path, L"Sensitivity", static_cast<int>(sensitivity));
+    WriteInt(path, L"LightingMode", static_cast<int>(lightingMode));
+    WriteInt(path, L"AudioColorMode", static_cast<int>(audioColorMode));
+    WriteInt(path, L"PrimaryColor", static_cast<int>(primaryColor.Packed()));
+    WriteInt(path, L"SecondaryColor", static_cast<int>(secondaryColor.Packed()));
+    WriteInt(path, L"EffectSpeed", effectSpeed);
+    WriteInt(path, L"ReverseDirection", reverseDirection ? 1 : 0);
     WriteInt(path, L"FrameIntervalMs", frameIntervalMs);
     WriteInt(path, L"MaxBrightness", maxBrightness);
     WriteInt(path, L"KeyboardEnabled", keyboardEnabled ? 1 : 0);
@@ -98,7 +114,7 @@ bool SetStartupEnabled(bool enabled) {
     }
     LSTATUS status = ERROR_SUCCESS;
     if (enabled) {
-        const std::wstring command = L"\"" + ExecutablePath() + L"\"";
+        const std::wstring command = L"\"" + ExecutablePath() + L"\" --background";
         status = RegSetValueExW(key,
                                 L"IROKLightCtrl",
                                 0,

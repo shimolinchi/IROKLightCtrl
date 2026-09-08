@@ -5,9 +5,49 @@
 #include <winrt/base.h>
 
 namespace als {
+namespace {
+
+RgbColor Blend(RgbColor from, RgbColor to, float amount) {
+    const auto channel = [amount](std::uint8_t first, std::uint8_t second) {
+        return static_cast<std::uint8_t>(std::clamp(
+            std::lround(first + (static_cast<float>(second) - first) * amount), 0L, 255L));
+    };
+    return {channel(from.r, to.r), channel(from.g, to.g), channel(from.b, to.b)};
+}
+
+RgbColor Scale(RgbColor color, float amount) {
+    amount = std::clamp(amount, 0.0F, 1.0F);
+    return {
+        static_cast<std::uint8_t>(std::lround(color.r * amount)),
+        static_cast<std::uint8_t>(std::lround(color.g * amount)),
+        static_cast<std::uint8_t>(std::lround(color.b * amount)),
+    };
+}
+
+float EffectPhase(std::chrono::steady_clock::time_point startedAt, int speed, bool reverse) {
+    const float normalizedSpeed = static_cast<float>(std::clamp(speed, 1, 100) - 1) / 99.0F;
+    const float secondsPerCycle = 12.0F - normalizedSpeed * 10.5F;
+    const float elapsed = std::chrono::duration<float>(
+                              std::chrono::steady_clock::now() - startedAt)
+                              .count();
+    float phase = std::fmod(elapsed / secondsPerCycle, 1.0F);
+    if (reverse) {
+        phase = std::fmod(phase + 0.5F, 1.0F);
+    }
+    return phase;
+}
+
+}  // namespace
 
 SyncEngine::SyncEngine(Settings settings) : settings_(std::move(settings)) {
     sensitivity_.store(static_cast<int>(settings_.sensitivity));
+    lightingMode_.store(static_cast<int>(settings_.lightingMode));
+    audioColorMode_.store(static_cast<int>(settings_.audioColorMode));
+    primaryColor_.store(settings_.primaryColor.Packed());
+    secondaryColor_.store(settings_.secondaryColor.Packed());
+    maxBrightness_.store(settings_.maxBrightness);
+    effectSpeed_.store(settings_.effectSpeed);
+    reverseDirection_.store(settings_.reverseDirection);
 }
 
 SyncEngine::~SyncEngine() {
@@ -41,6 +81,50 @@ void SyncEngine::TogglePaused() {
 void SyncEngine::SetSensitivity(Sensitivity sensitivity) {
     sensitivity_.store(static_cast<int>(sensitivity));
     settings_.sensitivity = sensitivity;
+    settings_.Save();
+}
+
+void SyncEngine::SetLightingMode(LightingMode mode) {
+    lightingMode_.store(static_cast<int>(mode));
+    settings_.lightingMode = mode;
+    settings_.Save();
+}
+
+void SyncEngine::SetAudioColorMode(AudioColorMode mode) {
+    audioColorMode_.store(static_cast<int>(mode));
+    settings_.audioColorMode = mode;
+    settings_.Save();
+}
+
+void SyncEngine::SetPrimaryColor(RgbColor color) {
+    primaryColor_.store(color.Packed());
+    settings_.primaryColor = color;
+    settings_.Save();
+}
+
+void SyncEngine::SetSecondaryColor(RgbColor color) {
+    secondaryColor_.store(color.Packed());
+    settings_.secondaryColor = color;
+    settings_.Save();
+}
+
+void SyncEngine::SetMaxBrightness(int brightness) {
+    brightness = std::clamp(brightness, 10, 100);
+    maxBrightness_.store(brightness);
+    settings_.maxBrightness = brightness;
+    settings_.Save();
+}
+
+void SyncEngine::SetEffectSpeed(int speed) {
+    speed = std::clamp(speed, 1, 100);
+    effectSpeed_.store(speed);
+    settings_.effectSpeed = speed;
+    settings_.Save();
+}
+
+void SyncEngine::SetReverseDirection(bool reverse) {
+    reverseDirection_.store(reverse);
+    settings_.reverseDirection = reverse;
     settings_.Save();
 }
 
@@ -121,6 +205,7 @@ void SyncEngine::ThreadMain() {
     });
     Logger::Instance().Info(L"Synchronization engine started");
 
+    const auto effectStartedAt = std::chrono::steady_clock::now();
     auto nextFrame = std::chrono::steady_clock::now();
     auto nextAudioRetry = nextFrame + std::chrono::seconds(3);
     auto nextKeyboardRetry = nextFrame + std::chrono::seconds(5);
@@ -150,7 +235,37 @@ void SyncEngine::ThreadMain() {
         if (now >= nextFrame) {
             nextFrame = now + std::chrono::milliseconds(settings_.frameIntervalMs);
             const Sensitivity sensitivity = static_cast<Sensitivity>(sensitivity_.load());
-            const RgbColor color = analyzer.Analyze(sensitivity, settings_.maxBrightness);
+            const int brightness = maxBrightness_.load();
+            const RgbColor spectrum = analyzer.Analyze(sensitivity, brightness);
+            const float phase = EffectPhase(
+                effectStartedAt, effectSpeed_.load(), reverseDirection_.load());
+            const float paletteAmount = 0.5F - 0.5F * std::cos(phase * 6.28318530718F);
+            const RgbColor palette = Blend(RgbColor::FromPacked(primaryColor_.load()),
+                                           RgbColor::FromPacked(secondaryColor_.load()),
+                                           paletteAmount);
+
+            RgbColor color = spectrum;
+            switch (static_cast<LightingMode>(lightingMode_.load())) {
+                case LightingMode::Static:
+                    color = Scale(RgbColor::FromPacked(primaryColor_.load()), brightness / 100.0F);
+                    break;
+                case LightingMode::Breathing: {
+                    const float pulse = 0.08F + 0.92F * paletteAmount;
+                    color = Scale(RgbColor::FromPacked(primaryColor_.load()),
+                                  pulse * brightness / 100.0F);
+                    break;
+                }
+                case LightingMode::ColorCycle:
+                    color = Scale(palette, brightness / 100.0F);
+                    break;
+                case LightingMode::Audio:
+                default:
+                    if (static_cast<AudioColorMode>(audioColorMode_.load()) ==
+                        AudioColorMode::GradientCycle) {
+                        color = Scale(palette, analyzer.LastLevel() * brightness / 100.0F);
+                    }
+                    break;
+            }
             if (!paused_.load()) {
                 if (settings_.keyboardEnabled && keyboard.IsOpen() && !keyboard.SetColor(color)) {
                     UpdateStatus([&](EngineStatus& status) {

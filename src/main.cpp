@@ -184,6 +184,7 @@ int RunSelfTest(int seconds) {
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     Logger::Instance().Initialize();
     const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const bool shouldUninitialize = SUCCEEDED(comResult);
@@ -210,15 +211,22 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         }
         result = RunSelfTest(std::clamp(seconds, 1, 120));
     } else {
+        const bool background = std::find(arguments.begin(), arguments.end(), L"--background") !=
+                                arguments.end();
         HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\IROKLightCtrl.Singleton");
         if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+            if (!background) {
+                if (HWND existing = FindWindowW(L"IROKLightCtrl.MainWindow", nullptr)) {
+                    PostMessageW(existing, WM_APP + 2, 0, 0);
+                }
+            }
             if (mutex) {
                 CloseHandle(mutex);
             }
             result = 0;
         } else {
             TrayApp app(instance);
-            result = app.Run();
+            result = app.Run(!background);
             ReleaseMutex(mutex);
             CloseHandle(mutex);
         }

@@ -26,6 +26,7 @@ private:
     std::uint32_t sampleRate_{48000};
 
     float peakEnvelope_{0.08F};
+    float smoothLevel_{};
     float smoothR_{};
     float smoothG_{};
     float smoothB_{};
