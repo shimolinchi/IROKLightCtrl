@@ -10,6 +10,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
       - name: Build x64 release
         shell: pwsh
         run: >-
