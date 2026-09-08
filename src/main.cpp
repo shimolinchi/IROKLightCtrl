@@ -1,0 +1,231 @@
+#include "AudioCapture.h"
+#include "AuraController.h"
+#include "IrokKeyboard.h"
+#include "LampArrayController.h"
+#include "Logger.h"
+#include "TrayApp.h"
+
+#include <Shellapi.h>
+#include <objbase.h>
+
+#include <fstream>
+#include <sstream>
+
+namespace {
+
+using namespace als;
+
+std::string ToUtf8(const std::wstring& text) {
+    if (text.empty()) {
+        return {};
+    }
+    const int length = WideCharToMultiByte(
+        CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+    std::string result(static_cast<std::size_t>(length), '\0');
+    WideCharToMultiByte(CP_UTF8,
+                        0,
+                        text.data(),
+                        static_cast<int>(text.size()),
+                        result.data(),
+                        length,
+                        nullptr,
+                        nullptr);
+    return result;
+}
+
+std::string JsonString(const std::wstring& value) {
+    const std::string utf8 = ToUtf8(value);
+    std::ostringstream output;
+    output << '"';
+    for (const unsigned char character : utf8) {
+        switch (character) {
+            case '"':
+                output << "\\\"";
+                break;
+            case '\\':
+                output << "\\\\";
+                break;
+            case '\b':
+                output << "\\b";
+                break;
+            case '\f':
+                output << "\\f";
+                break;
+            case '\n':
+                output << "\\n";
+                break;
+            case '\r':
+                output << "\\r";
+                break;
+            case '\t':
+                output << "\\t";
+                break;
+            default:
+                if (character < 0x20) {
+                    constexpr char digits[] = "0123456789abcdef";
+                    output << "\\u00" << digits[(character >> 4U) & 0x0fU]
+                           << digits[character & 0x0fU];
+                } else {
+                    output << static_cast<char>(character);
+                }
+                break;
+        }
+    }
+    output << '"';
+    return output.str();
+}
+
+bool WriteUtf8(const std::filesystem::path& path, const std::string& content) {
+    std::error_code error;
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path(), error);
+    }
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+    return stream.good();
+}
+
+std::vector<std::wstring> Arguments() {
+    int count = 0;
+    LPWSTR* raw = CommandLineToArgvW(GetCommandLineW(), &count);
+    std::vector<std::wstring> arguments;
+    if (raw) {
+        arguments.assign(raw, raw + count);
+        LocalFree(raw);
+    }
+    return arguments;
+}
+
+int RunDiagnostics(const std::filesystem::path& outputPath) {
+    AudioAnalyzer analyzer;
+    AudioCapture audio;
+    const bool audioReady = audio.Initialize(analyzer);
+    const std::wstring audioName = audio.DeviceName();
+    const std::uint32_t sampleRate = audio.SampleRate();
+    audio.Close();
+
+    IrokKeyboard keyboard;
+    const bool keyboardReady = keyboard.Open(false);
+    const std::wstring keyboardName = keyboard.ProductName();
+    const std::wstring keyboardFirmware = keyboard.FirmwareVersion();
+    const std::wstring keyboardError = keyboard.LastError();
+    const auto keyboardUsagePage = keyboard.UsagePage();
+    const auto keyboardUsage = keyboard.Usage();
+    const auto keyboardInputReport = keyboard.InputReportLength();
+    const auto keyboardOutputReport = keyboard.OutputReportLength();
+    keyboard.Close(false);
+
+    LampArrayController lighting;
+    lighting.Initialize();
+    const std::wstring lightingError = lighting.LastError();
+
+    CLSID auraClass{};
+    const bool auraRegistered = SUCCEEDED(CLSIDFromProgID(L"aura.sdk", &auraClass));
+
+    std::ostringstream json;
+    json << "{\n"
+         << "  \"application\": \"IROKLightCtrl\",\n"
+         << "  \"audio\": {\n"
+         << "    \"ready\": " << (audioReady ? "true" : "false") << ",\n"
+         << "    \"device\": " << JsonString(audioName) << ",\n"
+         << "    \"sampleRate\": " << sampleRate << "\n"
+         << "  },\n"
+         << "  \"keyboard\": {\n"
+         << "    \"ready\": " << (keyboardReady ? "true" : "false") << ",\n"
+         << "    \"device\": " << JsonString(keyboardName) << ",\n"
+         << "    \"firmware\": " << JsonString(keyboardFirmware) << ",\n"
+         << "    \"usagePage\": " << keyboardUsagePage << ",\n"
+         << "    \"usage\": " << keyboardUsage << ",\n"
+         << "    \"inputReportBytes\": " << keyboardInputReport << ",\n"
+         << "    \"outputReportBytes\": " << keyboardOutputReport << ",\n"
+         << "    \"error\": " << JsonString(keyboardError) << "\n"
+         << "  },\n"
+         << "  \"dynamicLighting\": {\n"
+         << "    \"chassisDevices\": " << lighting.DeviceCount() << ",\n"
+         << "    \"availableDevices\": " << lighting.AvailableCount() << ",\n"
+         << "    \"error\": " << JsonString(lightingError) << "\n"
+         << "  },\n"
+         << "  \"aura\": {\n"
+         << "    \"sdkRegistered\": " << (auraRegistered ? "true" : "false") << "\n"
+         << "  },\n"
+         << "  \"log\": " << JsonString(Logger::Instance().Path().wstring()) << "\n"
+         << "}\n";
+
+    lighting.Close();
+    return WriteUtf8(outputPath, json.str()) ? 0 : 2;
+}
+
+int RunSelfTest(int seconds) {
+    IrokKeyboard keyboard;
+    LampArrayController lighting;
+    const bool keyboardReady = keyboard.Open(true);
+    lighting.Initialize();
+    const bool lightingReady = lighting.AvailableCount() > 0;
+
+    constexpr RgbColor colors[] = {
+        {255, 0, 0}, {0, 255, 0}, {0, 96, 255}, {255, 0, 160},
+    };
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
+    std::size_t index = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
+        const RgbColor color = colors[index++ % std::size(colors)];
+        if (keyboardReady) {
+            keyboard.SetColor(color);
+        }
+        lighting.SetColor(color);
+        Sleep(500);
+    }
+
+    keyboard.Close(true);
+    lighting.Close();
+    return (keyboardReady || lightingReady) ? 0 : 3;
+}
+
+}  // namespace
+
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    Logger::Instance().Initialize();
+    const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool shouldUninitialize = SUCCEEDED(comResult);
+    if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
+        Logger::Instance().Error(L"COM initialization failed: " + HResultMessage(comResult));
+        return 1;
+    }
+
+    const auto arguments = Arguments();
+    int result = 0;
+    if (arguments.size() >= 2 && arguments[1] == L"--diagnose") {
+        const std::filesystem::path output = arguments.size() >= 3
+                                                 ? std::filesystem::path(arguments[2])
+                                                 : std::filesystem::current_path() /
+                                                       L"IROKLightCtrl-diagnostic.json";
+        result = RunDiagnostics(output);
+    } else if (arguments.size() >= 2 && arguments[1] == L"--self-test") {
+        int seconds = 6;
+        if (arguments.size() >= 3) {
+            try {
+                seconds = std::stoi(arguments[2]);
+            } catch (...) {
+            }
+        }
+        result = RunSelfTest(std::clamp(seconds, 1, 120));
+    } else {
+        HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\IROKLightCtrl.Singleton");
+        if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+            if (mutex) {
+                CloseHandle(mutex);
+            }
+            result = 0;
+        } else {
+            TrayApp app(instance);
+            result = app.Run();
+            ReleaseMutex(mutex);
+            CloseHandle(mutex);
+        }
+    }
+
+    if (shouldUninitialize) {
+        CoUninitialize();
+    }
+    return result;
+}

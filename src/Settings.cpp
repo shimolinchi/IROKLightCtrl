@@ -1,0 +1,121 @@
+#include "Settings.h"
+
+#include "Logger.h"
+
+#include <ShlObj.h>
+
+namespace als {
+namespace {
+
+int ReadInt(const std::filesystem::path& path, const wchar_t* name, int fallback) {
+    return static_cast<int>(GetPrivateProfileIntW(L"IROKLightCtrl", name, fallback, path.c_str()));
+}
+
+void WriteInt(const std::filesystem::path& path, const wchar_t* name, int value) {
+    WritePrivateProfileStringW(
+        L"IROKLightCtrl", name, std::to_wstring(value).c_str(), path.c_str());
+}
+
+std::wstring ExecutablePath() {
+    std::wstring path(32768, L'\0');
+    const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+    path.resize(length);
+    return path;
+}
+
+}  // namespace
+
+std::filesystem::path Settings::FilePath() {
+    PWSTR localAppData = nullptr;
+    std::filesystem::path path;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))) {
+        path = std::filesystem::path(localAppData) / L"IROKLightCtrl" / L"settings.ini";
+        CoTaskMemFree(localAppData);
+    } else {
+        path = std::filesystem::temp_directory_path() / L"IROKLightCtrl.ini";
+    }
+    return path;
+}
+
+Settings Settings::Load() {
+    Settings value;
+    const auto path = FilePath();
+    std::filesystem::create_directories(path.parent_path());
+    value.sensitivity = static_cast<Sensitivity>(
+        std::clamp(ReadInt(path, L"Sensitivity", 1), 0, 2));
+    value.frameIntervalMs = std::clamp(ReadInt(path, L"FrameIntervalMs", 50), 35, 100);
+    value.maxBrightness = std::clamp(ReadInt(path, L"MaxBrightness", 100), 10, 100);
+    value.keyboardEnabled = ReadInt(path, L"KeyboardEnabled", 1) != 0;
+    value.dynamicLightingEnabled = ReadInt(path, L"DynamicLightingEnabled", 1) != 0;
+    value.auraFallbackEnabled = ReadInt(path, L"AuraFallbackEnabled", 1) != 0;
+    if (!std::filesystem::exists(path)) {
+        value.Save();
+    }
+    return value;
+}
+
+void Settings::Save() const {
+    const auto path = FilePath();
+    std::filesystem::create_directories(path.parent_path());
+    WriteInt(path, L"Sensitivity", static_cast<int>(sensitivity));
+    WriteInt(path, L"FrameIntervalMs", frameIntervalMs);
+    WriteInt(path, L"MaxBrightness", maxBrightness);
+    WriteInt(path, L"KeyboardEnabled", keyboardEnabled ? 1 : 0);
+    WriteInt(path, L"DynamicLightingEnabled", dynamicLightingEnabled ? 1 : 0);
+    WriteInt(path, L"AuraFallbackEnabled", auraFallbackEnabled ? 1 : 0);
+}
+
+bool IsStartupEnabled() {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                      0,
+                      KEY_QUERY_VALUE,
+                      &key) != ERROR_SUCCESS) {
+        return false;
+    }
+    wchar_t value[32768]{};
+    DWORD bytes = sizeof(value);
+    DWORD type = 0;
+    const LSTATUS status = RegQueryValueExW(
+        key, L"IROKLightCtrl", nullptr, &type, reinterpret_cast<BYTE*>(value), &bytes);
+    RegCloseKey(key);
+    return status == ERROR_SUCCESS && (type == REG_SZ || type == REG_EXPAND_SZ);
+}
+
+bool SetStartupEnabled(bool enabled) {
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER,
+                        L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                        0,
+                        nullptr,
+                        0,
+                        KEY_SET_VALUE,
+                        nullptr,
+                        &key,
+                        nullptr) != ERROR_SUCCESS) {
+        return false;
+    }
+    LSTATUS status = ERROR_SUCCESS;
+    if (enabled) {
+        const std::wstring command = L"\"" + ExecutablePath() + L"\"";
+        status = RegSetValueExW(key,
+                                L"IROKLightCtrl",
+                                0,
+                                REG_SZ,
+                                reinterpret_cast<const BYTE*>(command.c_str()),
+                                static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
+    } else {
+        status = RegDeleteValueW(key, L"IROKLightCtrl");
+        if (status == ERROR_FILE_NOT_FOUND) {
+            status = ERROR_SUCCESS;
+        }
+    }
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS) {
+        Logger::Instance().Error(L"Could not update startup setting: " + Win32Message(status));
+    }
+    return status == ERROR_SUCCESS;
+}
+
+}  // namespace als

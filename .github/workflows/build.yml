@@ -1,0 +1,23 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build x64 release
+        shell: pwsh
+        run: >-
+          msbuild IROKLightCtrl.sln /m /t:Build
+          /p:Configuration=Release /p:Platform=x64
+          /p:PlatformToolset=v143 /nologo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IROKLightCtrl-win-x64
+          path: build/Release/IROKLightCtrl.exe
+          if-no-files-found: error
