@@ -277,9 +277,9 @@ void AuraController::ThreadMain() {
         const std::uint64_t currentGeneration = generation_.load();
         if (!devices.empty() && currentGeneration != appliedGeneration) {
             const RgbColor color = RgbColor::FromPacked(latestColor_.load());
-            // Aura SDK uses 0x00GGBBRR rather than the common 0x00RRGGBB order.
-            const std::uint32_t auraColor = (static_cast<std::uint32_t>(color.g) << 16U) |
-                                            (static_cast<std::uint32_t>(color.b) << 8U) |
+            // Aura SDK stores red in bits 0-7, green in 8-15, and blue in 16-23.
+            const std::uint32_t auraColor = (static_cast<std::uint32_t>(color.b) << 16U) |
+                                            (static_cast<std::uint32_t>(color.g) << 8U) |
                                             color.r;
             bool success = true;
             for (std::size_t deviceIndex = 0; deviceIndex < devices.size(); ++deviceIndex) {
