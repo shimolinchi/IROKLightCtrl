@@ -24,6 +24,15 @@ RgbColor Scale(RgbColor color, float amount) {
     };
 }
 
+RgbColor QuantizeReceiverColor(RgbColor color) {
+    const auto channel = [](std::uint8_t value) {
+        constexpr int step = 24;
+        return static_cast<std::uint8_t>(
+            std::min(255, ((static_cast<int>(value) + step / 2) / step) * step));
+    };
+    return {channel(color.r), channel(color.g), channel(color.b)};
+}
+
 float EffectPhase(std::chrono::steady_clock::time_point startedAt, int speed, bool reverse) {
     const float normalizedSpeed = static_cast<float>(std::clamp(speed, 1, 100) - 1) / 99.0F;
     const float secondsPerCycle = 12.0F - normalizedSpeed * 10.5F;
@@ -285,9 +294,15 @@ void SyncEngine::ThreadMain() {
                     break;
                 case LightingMode::Audio:
                 default:
+                    constexpr float idleLevel = 0.06F;
                     if (static_cast<AudioColorMode>(audioColorMode_.load()) ==
                         AudioColorMode::GradientCycle) {
-                        color = Scale(palette, analyzer.LastLevel() * brightness / 100.0F);
+                        color = Scale(palette,
+                                      std::max(idleLevel, analyzer.LastLevel()) *
+                                          brightness / 100.0F);
+                    } else if (analyzer.LastLevel() < idleLevel) {
+                        color = Scale(RgbColor::FromPacked(primaryColor_.load()),
+                                      idleLevel * brightness / 100.0F);
                     }
                     break;
             }
@@ -305,8 +320,8 @@ void SyncEngine::ThreadMain() {
                 }
                 if (settings_.angryMiaoReceiverEnabled && receiver.IsOpen() &&
                     now >= nextReceiverFrame) {
-                    nextReceiverFrame = now + std::chrono::milliseconds(125);
-                    if (!receiver.SetColor(color)) {
+                    nextReceiverFrame = now + std::chrono::milliseconds(400);
+                    if (!receiver.SetColor(QuantizeReceiverColor(color))) {
                         UpdateStatus([&](EngineStatus& status) {
                             status.angryMiaoReceiverReady = false;
                             status.lastError = receiver.LastError();

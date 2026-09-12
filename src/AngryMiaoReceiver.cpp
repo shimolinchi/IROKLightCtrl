@@ -213,6 +213,7 @@ bool AngryMiaoReceiver::SetColor(RgbColor color) {
     }
     LightingState state{};
     state.effect = 1;
+    state.brightness = 4;
     state.option = 7;
     state.color = color;
     state.chargingSwitch = savedLightingState_ ? savedLightingState_->chargingSwitch : 1;

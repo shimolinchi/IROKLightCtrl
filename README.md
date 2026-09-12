@@ -2,8 +2,8 @@
 
 IROKLightCtrl is a small, driverless Windows control panel that keeps an
 IROK MG75 PRO keyboard, an Angry Miao AM INFINITY 8K receiver, and compatible
-PC chassis lighting in sync with system audio. It captures playback through
-WASAPI loopback, analyzes bass, mids, and
+PC chassis lighting in sync with system audio. It captures the default
+multimedia playback endpoint through WASAPI loopback, analyzes bass, mids, and
 treble with an FFT, then sends the same color frame to every enabled device.
 
 No kernel driver or always-open command window is required.
@@ -47,6 +47,9 @@ Available software lighting modes are Audio, Static, Breathing, and Color
 Cycle. Changes are applied live to the keyboard and chassis and saved
 automatically. Enabling startup launches the app with `--background`, so no
 window appears at sign-in.
+
+Audio mode keeps a dim idle color when playback is silent, then raises the
+brightness from the captured audio level.
 
 Settings and logs are stored in `%LOCALAPPDATA%\IROKLightCtrl`. The original
 keyboard and receiver lighting modes are restored when the app exits normally.

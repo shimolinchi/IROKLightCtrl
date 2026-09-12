@@ -27,7 +27,10 @@ bool AudioCapture::Initialize(AudioAnalyzer& analyzer) {
     }
 
     Microsoft::WRL::ComPtr<IMMDevice> device;
-    result = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+    result = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device);
+    if (FAILED(result)) {
+        result = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+    }
     if (FAILED(result)) {
         Logger::Instance().Error(L"No default playback device: " + HResultMessage(result));
         return false;
