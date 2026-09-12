@@ -218,7 +218,7 @@ int RunReceiverSelfTest(int seconds) {
         return 4;
     }
     constexpr RgbColor colors[] = {
-        {255, 0, 0}, {0, 255, 0}, {0, 96, 255}, {255, 0, 160},
+        {0, 0, 0}, {255, 0, 0}, {0, 255, 0}, {0, 96, 255}, {255, 0, 160},
     };
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
     std::size_t index = 0;

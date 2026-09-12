@@ -33,6 +33,12 @@ RgbColor QuantizeReceiverColor(RgbColor color) {
     return {channel(color.r), channel(color.g), channel(color.b)};
 }
 
+int ReceiverColorDistance(RgbColor first, RgbColor second) {
+    return std::abs(static_cast<int>(first.r) - static_cast<int>(second.r)) +
+           std::abs(static_cast<int>(first.g) - static_cast<int>(second.g)) +
+           std::abs(static_cast<int>(first.b) - static_cast<int>(second.b));
+}
+
 float EffectPhase(std::chrono::steady_clock::time_point startedAt, int speed, bool reverse) {
     const float normalizedSpeed = static_cast<float>(std::clamp(speed, 1, 100) - 1) / 99.0F;
     const float secondsPerCycle = 12.0F - normalizedSpeed * 10.5F;
@@ -229,6 +235,13 @@ void SyncEngine::ThreadMain() {
     auto nextReceiverRetry = nextFrame + std::chrono::seconds(5);
     auto nextDynamicLightingRetry = nextFrame + std::chrono::seconds(5);
     auto nextReceiverFrame = nextFrame;
+    auto receiverQuietSince = nextFrame;
+    float receiverAudioBaseline = 0.0F;
+    float previousAudioLevel = 0.0F;
+    bool receiverPulseArmed = true;
+    bool hasReceiverOutput = false;
+    RgbColor receiverOutput{};
+    LightingMode previousReceiverMode = static_cast<LightingMode>(lightingMode_.load());
     std::size_t lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
     while (!stop_.load()) {
         const auto now = std::chrono::steady_clock::now();
@@ -246,6 +259,12 @@ void SyncEngine::ThreadMain() {
             nextKeyboardRetry = now + std::chrono::seconds(5);
             nextReceiverRetry = now + std::chrono::seconds(5);
             nextDynamicLightingRetry = now + std::chrono::seconds(5);
+            nextReceiverFrame = now;
+            receiverQuietSince = now;
+            receiverAudioBaseline = 0.0F;
+            previousAudioLevel = 0.0F;
+            receiverPulseArmed = true;
+            hasReceiverOutput = false;
             lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
         }
 
@@ -272,6 +291,8 @@ void SyncEngine::ThreadMain() {
             const Sensitivity sensitivity = static_cast<Sensitivity>(sensitivity_.load());
             const int brightness = maxBrightness_.load();
             const RgbColor spectrum = analyzer.Analyze(sensitivity, brightness);
+            const float audioLevel = analyzer.LastLevel();
+            const LightingMode lightingMode = static_cast<LightingMode>(lightingMode_.load());
             const float phase = EffectPhase(
                 effectStartedAt, effectSpeed_.load(), reverseDirection_.load());
             const float paletteAmount = 0.5F - 0.5F * std::cos(phase * 6.28318530718F);
@@ -280,7 +301,7 @@ void SyncEngine::ThreadMain() {
                                            paletteAmount);
 
             RgbColor color = spectrum;
-            switch (static_cast<LightingMode>(lightingMode_.load())) {
+            switch (lightingMode) {
                 case LightingMode::Static:
                     color = Scale(RgbColor::FromPacked(primaryColor_.load()), brightness / 100.0F);
                     break;
@@ -295,13 +316,13 @@ void SyncEngine::ThreadMain() {
                     break;
                 case LightingMode::Audio:
                 default:
-                    constexpr float idleLevel = 0.06F;
+                    constexpr float idleLevel = 0.012F;
                     if (static_cast<AudioColorMode>(audioColorMode_.load()) ==
                         AudioColorMode::GradientCycle) {
                         color = Scale(palette,
-                                      std::max(idleLevel, analyzer.LastLevel()) *
+                                      std::max(idleLevel, audioLevel) *
                                           brightness / 100.0F);
-                    } else if (analyzer.LastLevel() < idleLevel) {
+                    } else if (audioLevel < idleLevel) {
                         color = Scale(RgbColor::FromPacked(primaryColor_.load()),
                                       idleLevel * brightness / 100.0F);
                     }
@@ -317,16 +338,79 @@ void SyncEngine::ThreadMain() {
                     nextKeyboardRetry = now + std::chrono::seconds(5);
                 }
                 dynamicLighting.SetColor(color);
-                if (settings_.angryMiaoReceiverEnabled && receiver.IsOpen() &&
-                    now >= nextReceiverFrame) {
-                    nextReceiverFrame = now + std::chrono::milliseconds(400);
-                    if (!receiver.SetColor(QuantizeReceiverColor(color))) {
+                if (settings_.angryMiaoReceiverEnabled && receiver.IsOpen()) {
+                    if (lightingMode != previousReceiverMode) {
+                        receiverAudioBaseline = 0.0F;
+                        previousAudioLevel = 0.0F;
+                        receiverPulseArmed = true;
+                        receiverQuietSince = now;
+                        nextReceiverFrame = now;
+                        hasReceiverOutput = false;
+                        previousReceiverMode = lightingMode;
+                    }
+
+                    std::optional<RgbColor> requestedReceiverColor;
+                    if (lightingMode == LightingMode::Audio) {
+                        // This receiver reloads its effect on every HID write. Trigger only on
+                        // transients, then wait for the signal to fall before arming again.
+                        receiverAudioBaseline +=
+                            (audioLevel - receiverAudioBaseline) * 0.035F;
+                        const float releaseThreshold =
+                            std::max(0.055F, receiverAudioBaseline * 1.12F);
+                        if (audioLevel <= releaseThreshold) {
+                            receiverPulseArmed = true;
+                        }
+
+                        constexpr float quietLevel = 0.025F;
+                        if (audioLevel < quietLevel) {
+                            if (now - receiverQuietSince >= std::chrono::milliseconds(700) &&
+                                (!hasReceiverOutput || receiverOutput != RgbColor{})) {
+                                requestedReceiverColor = RgbColor{};
+                            }
+                        } else {
+                            receiverQuietSince = now;
+                        }
+
+                        const float rise = audioLevel - previousAudioLevel;
+                        const float pulseThreshold =
+                            std::max(0.14F, receiverAudioBaseline * 1.48F);
+                        const bool pulse = receiverPulseArmed && audioLevel >= 0.10F &&
+                                           (rise >= 0.085F ||
+                                            (rise >= 0.035F && audioLevel >= pulseThreshold));
+                        if (pulse && now >= nextReceiverFrame) {
+                            const RgbColor candidate = QuantizeReceiverColor(color);
+                            if (!hasReceiverOutput || receiverOutput == RgbColor{} ||
+                                ReceiverColorDistance(candidate, receiverOutput) >= 72) {
+                                requestedReceiverColor = candidate;
+                            }
+                            receiverPulseArmed = false;
+                            nextReceiverFrame = now + std::chrono::milliseconds(650);
+                        }
+                        previousAudioLevel = audioLevel;
+                    } else if (now >= nextReceiverFrame) {
+                        const RgbColor candidate = QuantizeReceiverColor(color);
+                        const bool staticMode = lightingMode == LightingMode::Static;
+                        const int minimumDistance = staticMode ? 1 : 120;
+                        if (!hasReceiverOutput ||
+                            ReceiverColorDistance(candidate, receiverOutput) >= minimumDistance) {
+                            requestedReceiverColor = candidate;
+                        }
+                        nextReceiverFrame = now + (staticMode ? std::chrono::milliseconds(500)
+                                                              : std::chrono::milliseconds(1500));
+                    }
+
+                    if (requestedReceiverColor &&
+                        !receiver.SetColor(*requestedReceiverColor)) {
                         UpdateStatus([&](EngineStatus& status) {
                             status.angryMiaoReceiverReady = false;
                             status.lastError = receiver.LastError();
                         });
                         receiver.Close(false);
                         nextReceiverRetry = now + std::chrono::seconds(5);
+                        hasReceiverOutput = false;
+                    } else if (requestedReceiverColor) {
+                        receiverOutput = *requestedReceiverColor;
+                        hasReceiverOutput = true;
                     }
                 }
             }
@@ -337,7 +421,7 @@ void SyncEngine::ThreadMain() {
                 status.angryMiaoReceiverReady = receiver.IsOpen();
                 status.dynamicLightingDevices = static_cast<int>(dynamicLighting.DeviceCount());
                 status.dynamicLightingAvailable = static_cast<int>(dynamicLighting.AvailableCount());
-                status.audioLevel = analyzer.LastLevel();
+                status.audioLevel = audioLevel;
                 status.color = color;
             });
             const std::size_t available = dynamicLighting.AvailableCount();

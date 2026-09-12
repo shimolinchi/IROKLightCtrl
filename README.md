@@ -47,8 +47,9 @@ Cycle. Changes are applied live to the keyboard and chassis and saved
 automatically. Enabling startup launches the app with `--background`, so no
 window appears at sign-in.
 
-Audio mode keeps a dim idle color when playback is silent, then raises the
-brightness from the captured audio level.
+Audio mode keeps only a very faint keyboard and chassis glow while playback is
+silent. The non-streaming receiver turns fully off after silence and updates
+only on distinct audio pulses, reducing effect-reload flicker during steady audio.
 
 Settings and logs are stored in `%LOCALAPPDATA%\LightController`. The interface
 theme defaults to dark and can be switched between dark and light on the Devices page.
