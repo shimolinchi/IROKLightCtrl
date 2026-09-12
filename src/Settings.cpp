@@ -56,6 +56,7 @@ Settings Settings::Load() {
     value.frameIntervalMs = std::clamp(ReadInt(path, L"FrameIntervalMs", 50), 35, 100);
     value.maxBrightness = std::clamp(ReadInt(path, L"MaxBrightness", 100), 10, 100);
     value.keyboardEnabled = ReadInt(path, L"KeyboardEnabled", 1) != 0;
+    value.angryMiaoReceiverEnabled = ReadInt(path, L"AngryMiaoReceiverEnabled", 1) != 0;
     value.dynamicLightingEnabled = ReadInt(path, L"DynamicLightingEnabled", 1) != 0;
     value.auraFallbackEnabled = ReadInt(path, L"AuraFallbackEnabled", 1) != 0;
     if (!std::filesystem::exists(path)) {
@@ -77,6 +78,7 @@ void Settings::Save() const {
     WriteInt(path, L"FrameIntervalMs", frameIntervalMs);
     WriteInt(path, L"MaxBrightness", maxBrightness);
     WriteInt(path, L"KeyboardEnabled", keyboardEnabled ? 1 : 0);
+    WriteInt(path, L"AngryMiaoReceiverEnabled", angryMiaoReceiverEnabled ? 1 : 0);
     WriteInt(path, L"DynamicLightingEnabled", dynamicLightingEnabled ? 1 : 0);
     WriteInt(path, L"AuraFallbackEnabled", auraFallbackEnabled ? 1 : 0);
 }

@@ -1,4 +1,5 @@
 #include "AudioCapture.h"
+#include "AngryMiaoReceiver.h"
 #include "AuraController.h"
 #include "IrokKeyboard.h"
 #include "LampArrayController.h"
@@ -115,6 +116,15 @@ int RunDiagnostics(const std::filesystem::path& outputPath) {
     const auto keyboardOutputReport = keyboard.OutputReportLength();
     keyboard.Close(false);
 
+    AngryMiaoReceiver receiver;
+    const bool receiverReady = receiver.Open(false);
+    const std::wstring receiverName = receiver.ProductName();
+    const std::wstring receiverError = receiver.LastError();
+    const auto receiverUsagePage = receiver.UsagePage();
+    const auto receiverUsage = receiver.Usage();
+    const auto receiverFeatureReport = receiver.FeatureReportLength();
+    receiver.Close(false);
+
     LampArrayController lighting;
     lighting.Initialize();
     const std::wstring lightingError = lighting.LastError();
@@ -144,6 +154,14 @@ int RunDiagnostics(const std::filesystem::path& outputPath) {
          << "    \"chassisDevices\": " << lighting.DeviceCount() << ",\n"
          << "    \"availableDevices\": " << lighting.AvailableCount() << ",\n"
          << "    \"error\": " << JsonString(lightingError) << "\n"
+         << "  },\n"
+         << "  \"angryMiaoReceiver\": {\n"
+         << "    \"ready\": " << (receiverReady ? "true" : "false") << ",\n"
+         << "    \"device\": " << JsonString(receiverName) << ",\n"
+         << "    \"usagePage\": " << receiverUsagePage << ",\n"
+         << "    \"usage\": " << receiverUsage << ",\n"
+         << "    \"featureReportBytes\": " << receiverFeatureReport << ",\n"
+         << "    \"error\": " << JsonString(receiverError) << "\n"
          << "  },\n"
          << "  \"aura\": {\n"
          << "    \"sdkRegistered\": " << (auraRegistered ? "true" : "false") << "\n"
@@ -181,6 +199,27 @@ int RunSelfTest(int seconds) {
     return (keyboardReady || lightingReady) ? 0 : 3;
 }
 
+int RunReceiverSelfTest(int seconds) {
+    AngryMiaoReceiver receiver;
+    if (!receiver.Open(true)) {
+        return 4;
+    }
+    constexpr RgbColor colors[] = {
+        {255, 0, 0}, {0, 255, 0}, {0, 96, 255}, {255, 0, 160},
+    };
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
+    std::size_t index = 0;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (!receiver.SetColor(colors[index++ % std::size(colors)])) {
+            receiver.Close(false);
+            return 5;
+        }
+        Sleep(500);
+    }
+    receiver.Close(true);
+    return 0;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
@@ -210,6 +249,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             }
         }
         result = RunSelfTest(std::clamp(seconds, 1, 120));
+    } else if (arguments.size() >= 2 && arguments[1] == L"--receiver-self-test") {
+        int seconds = 4;
+        if (arguments.size() >= 3) {
+            try {
+                seconds = std::stoi(arguments[2]);
+            } catch (...) {
+            }
+        }
+        result = RunReceiverSelfTest(std::clamp(seconds, 1, 120));
     } else {
         const bool background = std::find(arguments.begin(), arguments.end(), L"--background") !=
                                 arguments.end();

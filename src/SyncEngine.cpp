@@ -154,6 +154,7 @@ void SyncEngine::ThreadMain() {
     AudioAnalyzer analyzer;
     AudioCapture audio;
     IrokKeyboard keyboard;
+    AngryMiaoReceiver receiver;
     LampArrayController dynamicLighting;
     AuraController aura;
 
@@ -181,6 +182,19 @@ void SyncEngine::ThreadMain() {
             }
         });
     };
+    auto initializeReceiver = [&] {
+        if (!settings_.angryMiaoReceiverEnabled) {
+            return;
+        }
+        const bool ready = receiver.Open(true);
+        UpdateStatus([&](EngineStatus& status) {
+            status.angryMiaoReceiverReady = ready;
+            status.angryMiaoReceiverName = receiver.ProductName();
+            if (!ready) {
+                status.lastError = receiver.LastError();
+            }
+        });
+    };
     auto initializeDynamicLighting = [&] {
         if (!settings_.dynamicLightingEnabled) {
             return;
@@ -194,6 +208,7 @@ void SyncEngine::ThreadMain() {
 
     initializeAudio();
     initializeKeyboard();
+    initializeReceiver();
     initializeDynamicLighting();
     if (settings_.auraFallbackEnabled) {
         aura.Start();
@@ -209,18 +224,23 @@ void SyncEngine::ThreadMain() {
     auto nextFrame = std::chrono::steady_clock::now();
     auto nextAudioRetry = nextFrame + std::chrono::seconds(3);
     auto nextKeyboardRetry = nextFrame + std::chrono::seconds(5);
+    auto nextReceiverRetry = nextFrame + std::chrono::seconds(5);
+    auto nextReceiverFrame = nextFrame;
     while (!stop_.load()) {
         const auto now = std::chrono::steady_clock::now();
         if (reconnect_.exchange(false)) {
             Logger::Instance().Info(L"Manual device reconnect requested");
             audio.Close();
             keyboard.Close(true);
+            receiver.Close(true);
             dynamicLighting.Close();
             initializeAudio();
             initializeKeyboard();
+            initializeReceiver();
             initializeDynamicLighting();
             nextAudioRetry = now + std::chrono::seconds(3);
             nextKeyboardRetry = now + std::chrono::seconds(5);
+            nextReceiverRetry = now + std::chrono::seconds(5);
         }
 
         if (!audio.Pump() && now >= nextAudioRetry) {
@@ -230,6 +250,11 @@ void SyncEngine::ThreadMain() {
         if (settings_.keyboardEnabled && !keyboard.IsOpen() && now >= nextKeyboardRetry) {
             initializeKeyboard();
             nextKeyboardRetry = now + std::chrono::seconds(5);
+        }
+        if (settings_.angryMiaoReceiverEnabled && !receiver.IsOpen() &&
+            now >= nextReceiverRetry) {
+            initializeReceiver();
+            nextReceiverRetry = now + std::chrono::seconds(5);
         }
 
         if (now >= nextFrame) {
@@ -278,6 +303,18 @@ void SyncEngine::ThreadMain() {
                 if (settings_.dynamicLightingEnabled) {
                     dynamicLighting.SetColor(color);
                 }
+                if (settings_.angryMiaoReceiverEnabled && receiver.IsOpen() &&
+                    now >= nextReceiverFrame) {
+                    nextReceiverFrame = now + std::chrono::milliseconds(125);
+                    if (!receiver.SetColor(color)) {
+                        UpdateStatus([&](EngineStatus& status) {
+                            status.angryMiaoReceiverReady = false;
+                            status.lastError = receiver.LastError();
+                        });
+                        receiver.Close(false);
+                        nextReceiverRetry = now + std::chrono::seconds(5);
+                    }
+                }
                 if (settings_.auraFallbackEnabled) {
                     aura.SubmitColor(color);
                 }
@@ -286,6 +323,7 @@ void SyncEngine::ThreadMain() {
                 status.paused = paused_.load();
                 status.audioReady = !audio.DeviceName().empty();
                 status.keyboardReady = keyboard.IsOpen();
+                status.angryMiaoReceiverReady = receiver.IsOpen();
                 status.dynamicLightingDevices = static_cast<int>(dynamicLighting.DeviceCount());
                 status.dynamicLightingAvailable = static_cast<int>(dynamicLighting.AvailableCount());
                 status.auraReady = aura.IsReady();
@@ -299,12 +337,14 @@ void SyncEngine::ThreadMain() {
     }
 
     keyboard.Close(true);
+    receiver.Close(true);
     dynamicLighting.Close();
     audio.Close();
     aura.Stop();
     UpdateStatus([&](EngineStatus& status) {
         status.running = false;
         status.keyboardReady = false;
+        status.angryMiaoReceiverReady = false;
         status.audioReady = false;
         status.auraReady = false;
     });

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioCapture.h"
+#include "AngryMiaoReceiver.h"
 #include "AuraController.h"
 #include "IrokKeyboard.h"
 #include "LampArrayController.h"
@@ -13,6 +14,7 @@ struct EngineStatus {
     bool paused{};
     bool audioReady{};
     bool keyboardReady{};
+    bool angryMiaoReceiverReady{};
     int dynamicLightingDevices{};
     int dynamicLightingAvailable{};
     bool auraReady{};
@@ -22,6 +24,7 @@ struct EngineStatus {
     std::wstring audioName;
     std::wstring keyboardName;
     std::wstring keyboardFirmware;
+    std::wstring angryMiaoReceiverName;
     std::wstring auraStatus;
     std::wstring lastError;
 };

@@ -89,6 +89,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\AngryMiaoReceiver.cpp" />
     <ClCompile Include="src\AudioAnalyzer.cpp" />
     <ClCompile Include="src\AudioCapture.cpp" />
     <ClCompile Include="src\AuraController.cpp" />
@@ -101,6 +102,7 @@
     <ClCompile Include="src\TrayApp.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\AngryMiaoReceiver.h" />
     <ClInclude Include="src\AudioAnalyzer.h" />
     <ClInclude Include="src\AudioCapture.h" />
     <ClInclude Include="src\AuraController.h" />

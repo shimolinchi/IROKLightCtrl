@@ -1,8 +1,9 @@
 # IROKLightCtrl
 
 IROKLightCtrl is a small, driverless Windows control panel that keeps an
-IROK MG75 PRO keyboard and compatible PC chassis lighting in sync with system
-audio. It captures playback through WASAPI loopback, analyzes bass, mids, and
+IROK MG75 PRO keyboard, an Angry Miao AM INFINITY 8K receiver, and compatible
+PC chassis lighting in sync with system audio. It captures playback through
+WASAPI loopback, analyzes bass, mids, and
 treble with an FFT, then sends the same color frame to every enabled device.
 
 No kernel driver or always-open command window is required.
@@ -10,6 +11,8 @@ No kernel driver or always-open command window is required.
 ## Hardware support
 
 - IROK MG75 PRO (`VID_1CA5`, `PID_0807`) through its vendor HID interface
+- Angry Miao AM INFINITY 8K receiver (`VID_3151`, `PID_5007`) through its
+  vendor HID interface
 - Chassis devices exposed as `LampArrayKind::Chassis` by Windows Dynamic Lighting
 - ASUS Aura SDK as a background-compatible chassis fallback when installed
 
@@ -46,7 +49,7 @@ automatically. Enabling startup launches the app with `--background`, so no
 window appears at sign-in.
 
 Settings and logs are stored in `%LOCALAPPDATA%\IROKLightCtrl`. The original
-keyboard lighting mode is restored when the app exits normally.
+keyboard and receiver lighting modes are restored when the app exits normally.
 
 Windows may reserve Dynamic Lighting devices for an app with higher foreground
 or background priority. Keep Dynamic Lighting enabled and allow IROKLightCtrl
@@ -66,6 +69,12 @@ colors for six seconds:
 
 ```powershell
 .\build\Release\IROKLightCtrl.exe --self-test 6
+```
+
+Test only the AM INFINITY 8K receiver RGB and restore its previous effect:
+
+```powershell
+.\build\Release\IROKLightCtrl.exe --receiver-self-test 4
 ```
 
 ## License

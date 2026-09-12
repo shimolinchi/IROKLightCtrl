@@ -969,7 +969,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
               titleFont_,
               kText);
     DrawLabel(context,
-              L"IROK 键盘与 Windows 灯光服务",
+              L"IROK 键盘、AM 接收器与 Windows 灯光服务",
               {workspace.left + Scale(27), workspace.top + Scale(53), workspace.right - Scale(26),
                workspace.top + Scale(78)},
               smallFont_,
@@ -980,7 +980,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
     const int left = workspace.left + Scale(26);
     const int right = workspace.right - Scale(26);
     const int cardWidth = (right - left - gap) / 2;
-    const int cardHeight = Scale(126);
+    const int cardHeight = Scale(110);
     const int rowOne = workspace.top + Scale(101);
     const int rowTwo = rowOne + cardHeight + gap;
 
@@ -1019,13 +1019,22 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                    status.auraReady,
                    kIconAura);
 
+    const int rowThree = rowTwo + cardHeight + gap;
+    DrawDeviceCard(context,
+                   {left, rowThree, left + cardWidth, rowThree + cardHeight},
+                   L"AM INFINITY 8K 接收器",
+                   status.angryMiaoReceiverName.empty() ? L"等待 USB HID 接收器"
+                                                        : status.angryMiaoReceiverName,
+                   status.angryMiaoReceiverReady,
+                   kIconChassis);
+
     const RECT note{left,
                     workspace.bottom - Scale(98),
                     right,
                     workspace.bottom - Scale(31)};
     FillRounded(context, note, RGB(255, 241, 234), Scale(8));
     DrawLabel(context,
-              L"输出目标  IROK MG75 PRO  ·  Windows 动态光效  ·  ASUS Aura",
+              L"输出目标  IROK MG75 PRO  ·  AM INFINITY 8K  ·  Windows 动态光效  ·  ASUS Aura",
               {note.left + Scale(17), note.top + Scale(8), note.right - Scale(17), note.bottom - Scale(8)},
               bodyFont_,
               RGB(117, 63, 43),

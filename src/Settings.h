@@ -15,6 +15,7 @@ struct Settings {
     int frameIntervalMs{50};
     int maxBrightness{100};
     bool keyboardEnabled{true};
+    bool angryMiaoReceiverEnabled{true};
     bool dynamicLightingEnabled{true};
     bool auraFallbackEnabled{true};
 
