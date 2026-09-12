@@ -17,7 +17,7 @@
 #include <thread>
 #include <vector>
 
-namespace als {
+namespace lightctrl {
 
 struct RgbColor {
     std::uint8_t r{};
@@ -58,6 +58,21 @@ enum class AudioColorMode : int {
     GradientCycle = 1,
 };
 
+enum class ThemeMode : int {
+    Dark = 0,
+    Light = 1,
+};
+
+inline std::filesystem::path UserLocalDataPath() {
+    wchar_t userProfile[32768]{};
+    const DWORD length = GetEnvironmentVariableW(
+        L"USERPROFILE", userProfile, static_cast<DWORD>(std::size(userProfile)));
+    if (length > 0 && length < std::size(userProfile)) {
+        return std::filesystem::path(userProfile) / L"AppData" / L"Local";
+    }
+    return std::filesystem::temp_directory_path();
+}
+
 inline std::wstring HResultMessage(HRESULT result) {
     wchar_t* message = nullptr;
     const DWORD size = FormatMessageW(
@@ -82,4 +97,4 @@ inline std::wstring Win32Message(DWORD error = GetLastError()) {
     return HResultMessage(HRESULT_FROM_WIN32(error));
 }
 
-}  // namespace als
+}  // namespace lightctrl

@@ -6,7 +6,7 @@
 #include <Mmdeviceapi.h>
 #include <wrl/client.h>
 
-namespace als {
+namespace lightctrl {
 
 class AudioCapture final {
 public:
@@ -37,4 +37,4 @@ private:
     bool running_{};
 };
 
-}  // namespace als
+}  // namespace lightctrl

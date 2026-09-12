@@ -7,7 +7,7 @@
 
 #include <array>
 
-namespace als {
+namespace lightctrl {
 
 class TrayApp final {
 public:
@@ -17,6 +17,37 @@ public:
     int Run(bool showWindow);
 
 private:
+    struct UiPalette {
+        COLORREF backgroundTop{};
+        COLORREF backgroundBottom{};
+        COLORREF navigation{};
+        COLORREF workspace{};
+        COLORREF panel{};
+        COLORREF surface{};
+        COLORREF surfaceAlt{};
+        COLORREF surfaceHover{};
+        COLORREF border{};
+        COLORREF text{};
+        COLORREF hint{};
+        COLORREF disabledText{};
+        COLORREF line{};
+        COLORREF accentSoft{};
+        COLORREF accentSoftText{};
+        COLORREF note{};
+        COLORREF noteText{};
+        COLORREF selectedNav{};
+        COLORREF navText{};
+        COLORREF navIcon{};
+        COLORREF track{};
+        COLORREF trackDisabled{};
+        COLORREF toggleOff{};
+        COLORREF toggleOffHover{};
+        COLORREF knob{};
+        COLORREF caption{};
+        COLORREF captionText{};
+        COLORREF captionBorder{};
+    };
+
     struct HitTarget {
         int id{};
         RECT bounds{};
@@ -88,6 +119,8 @@ private:
     void UpdateSlider(int id, int x);
     void PickColor(bool primary);
     void StartMouseTracking();
+    void RefreshPalette();
+    void ApplyWindowTheme();
 
     void AddTrayIcon();
     void RemoveTrayIcon();
@@ -104,6 +137,7 @@ private:
     NOTIFYICONDATAW trayIcon_{};
     Settings settings_;
     SyncEngine engine_;
+    UiPalette palette_{};
     UINT dpi_{96};
     int selectedPage_{};
     int hoveredTarget_{};
@@ -128,4 +162,4 @@ private:
     std::array<COLORREF, 16> customColors_{};
 };
 
-}  // namespace als
+}  // namespace lightctrl

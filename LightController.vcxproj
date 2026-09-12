@@ -14,7 +14,7 @@
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{A8075BEA-6D04-4E5E-8B0C-0479FBFC6D08}</ProjectGuid>
-    <RootNamespace>IROKLightCtrl</RootNamespace>
+    <RootNamespace>LightController</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -43,8 +43,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <OutDir>$(ProjectDir)build\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)build\obj\$(Configuration)\</IntDir>
-    <TargetName>IROKLightCtrl</TargetName>
+    <IntDir>$(ProjectDir)build\obj\$(Configuration)\$(TargetName)\</IntDir>
+    <TargetName>LightController</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -92,7 +92,6 @@
     <ClCompile Include="src\AngryMiaoReceiver.cpp" />
     <ClCompile Include="src\AudioAnalyzer.cpp" />
     <ClCompile Include="src\AudioCapture.cpp" />
-    <ClCompile Include="src\AuraController.cpp" />
     <ClCompile Include="src\IrokKeyboard.cpp" />
     <ClCompile Include="src\LampArrayController.cpp" />
     <ClCompile Include="src\Logger.cpp" />
@@ -105,7 +104,6 @@
     <ClInclude Include="src\AngryMiaoReceiver.h" />
     <ClInclude Include="src\AudioAnalyzer.h" />
     <ClInclude Include="src\AudioCapture.h" />
-    <ClInclude Include="src\AuraController.h" />
     <ClInclude Include="src\Common.h" />
     <ClInclude Include="src\IrokKeyboard.h" />
     <ClInclude Include="src\LampArrayController.h" />

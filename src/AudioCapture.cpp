@@ -6,7 +6,7 @@
 #include <Ksmedia.h>
 #include <Propvarutil.h>
 
-namespace als {
+namespace lightctrl {
 
 AudioCapture::~AudioCapture() {
     Close();
@@ -193,4 +193,4 @@ void AudioCapture::Close() {
     analyzer_ = nullptr;
 }
 
-}  // namespace als
+}  // namespace lightctrl

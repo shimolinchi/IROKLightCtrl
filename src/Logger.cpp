@@ -1,11 +1,9 @@
 #include "Logger.h"
 
-#include <ShlObj.h>
-
 #include <iomanip>
 #include <sstream>
 
-namespace als {
+namespace lightctrl {
 namespace {
 
 std::string ToUtf8(const std::wstring& text) {
@@ -29,13 +27,7 @@ Logger& Logger::Instance() {
 
 void Logger::Initialize() {
     std::lock_guard lock(mutex_);
-    PWSTR localAppData = nullptr;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))) {
-        path_ = std::filesystem::path(localAppData) / L"IROKLightCtrl" / L"IROKLightCtrl.log";
-        CoTaskMemFree(localAppData);
-    } else {
-        path_ = std::filesystem::temp_directory_path() / L"IROKLightCtrl.log";
-    }
+    path_ = UserLocalDataPath() / L"LightController" / L"LightController.log";
     std::filesystem::create_directories(path_.parent_path());
     std::error_code error;
     if (std::filesystem::exists(path_, error) && std::filesystem::file_size(path_, error) > 1024 * 1024) {
@@ -69,4 +61,4 @@ void Logger::Write(const wchar_t* level, const std::wstring& message) {
     stream.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
 }
 
-}  // namespace als
+}  // namespace lightctrl

@@ -2,7 +2,7 @@
 
 #include "Common.h"
 
-namespace als {
+namespace lightctrl {
 
 struct Settings {
     Sensitivity sensitivity{Sensitivity::Normal};
@@ -16,8 +16,7 @@ struct Settings {
     int maxBrightness{100};
     bool keyboardEnabled{true};
     bool angryMiaoReceiverEnabled{true};
-    bool dynamicLightingEnabled{true};
-    bool auraFallbackEnabled{true};
+    ThemeMode themeMode{ThemeMode::Dark};
 
     static Settings Load();
     void Save() const;
@@ -27,4 +26,4 @@ struct Settings {
 bool IsStartupEnabled();
 bool SetStartupEnabled(bool enabled);
 
-}  // namespace als
+}  // namespace lightctrl

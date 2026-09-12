@@ -2,7 +2,7 @@
 
 #include "Logger.h"
 
-namespace als {
+namespace lightctrl {
 
 bool LampArrayController::Initialize() {
     Close();
@@ -28,7 +28,8 @@ bool LampArrayController::Initialize() {
             arrays_.push_back(std::move(array));
         }
         Logger::Instance().Info(L"Windows Dynamic Lighting chassis devices: " +
-                                std::to_wstring(arrays_.size()));
+                                std::to_wstring(arrays_.size()) + L", available: " +
+                                std::to_wstring(AvailableCount()));
         return !arrays_.empty();
     } catch (const winrt::hresult_error& error) {
         lastError_ = error.message().c_str();
@@ -90,4 +91,4 @@ void LampArrayController::Close() {
     hasLastColor_ = false;
 }
 
-}  // namespace als
+}  // namespace lightctrl

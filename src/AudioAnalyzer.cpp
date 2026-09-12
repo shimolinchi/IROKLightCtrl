@@ -2,7 +2,7 @@
 
 #include <numbers>
 
-namespace als {
+namespace lightctrl {
 
 void AudioAnalyzer::SetSampleRate(std::uint32_t sampleRate) {
     std::lock_guard lock(mutex_);
@@ -145,4 +145,4 @@ void AudioAnalyzer::Transform(std::array<std::complex<float>, kFftSize>& values)
     }
 }
 
-}  // namespace als
+}  // namespace lightctrl

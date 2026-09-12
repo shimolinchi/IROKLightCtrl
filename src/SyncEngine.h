@@ -2,12 +2,11 @@
 
 #include "AudioCapture.h"
 #include "AngryMiaoReceiver.h"
-#include "AuraController.h"
 #include "IrokKeyboard.h"
 #include "LampArrayController.h"
 #include "Settings.h"
 
-namespace als {
+namespace lightctrl {
 
 struct EngineStatus {
     bool running{};
@@ -17,15 +16,12 @@ struct EngineStatus {
     bool angryMiaoReceiverReady{};
     int dynamicLightingDevices{};
     int dynamicLightingAvailable{};
-    bool auraReady{};
-    int auraDevices{};
     float audioLevel{};
     RgbColor color{};
     std::wstring audioName;
     std::wstring keyboardName;
     std::wstring keyboardFirmware;
     std::wstring angryMiaoReceiverName;
-    std::wstring auraStatus;
     std::wstring lastError;
 };
 
@@ -93,4 +89,4 @@ private:
     EngineStatus status_;
 };
 
-}  // namespace als
+}  // namespace lightctrl

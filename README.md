@@ -1,6 +1,6 @@
-# IROKLightCtrl
+# LightController
 
-IROKLightCtrl is a small, driverless Windows control panel that keeps an
+LightController is a small, driverless Windows control panel that keeps an
 IROK MG75 PRO keyboard, an Angry Miao AM INFINITY 8K receiver, and compatible
 PC chassis lighting in sync with system audio. It captures the default
 multimedia playback endpoint through WASAPI loopback, analyzes bass, mids, and
@@ -14,7 +14,6 @@ No kernel driver or always-open command window is required.
 - Angry Miao AM INFINITY 8K receiver (`VID_3151`, `PID_5007`) through its
   vendor HID interface
 - Chassis devices exposed as `LampArrayKind::Chassis` by Windows Dynamic Lighting
-- ASUS Aura SDK as a background-compatible chassis fallback when installed
 
 The IROK HID implementation is based on the public protocol used by IROK's
 WebHID configurator. IROK does not officially endorse this project.
@@ -33,11 +32,11 @@ From PowerShell:
 .\scripts\build.ps1
 ```
 
-The executable is written to `build\Release\IROKLightCtrl.exe`.
+The executable is written to `build\Release\LightController.exe`.
 
 ## Use
 
-Start `IROKLightCtrl.exe` to open the control panel. It provides live device
+Start `LightController.exe` to open the control panel. It provides live device
 status, lighting modes, brightness, speed, direction, two selectable colors,
 audio sensitivity, and either full-spectrum or custom color-range audio
 mapping. Closing the window keeps synchronization running in the notification
@@ -51,13 +50,15 @@ window appears at sign-in.
 Audio mode keeps a dim idle color when playback is silent, then raises the
 brightness from the captured audio level.
 
-Settings and logs are stored in `%LOCALAPPDATA%\IROKLightCtrl`. The original
-keyboard and receiver lighting modes are restored when the app exits normally.
+Settings and logs are stored in `%LOCALAPPDATA%\LightController`. The interface
+theme defaults to dark and can be switched between dark and light on the Devices page.
+The keyboard and receiver lighting modes are restored when the app exits normally.
 
-Windows may reserve Dynamic Lighting devices for an app with higher foreground
-or background priority. Keep Dynamic Lighting enabled and allow IROKLightCtrl
-to control compatible devices. If the ASUS Aura SDK is installed, the app also
-initializes it on a worker thread; ASUS enumeration can take about one minute.
+Run `scripts\install-ambient.ps1` once after building to register the sparse
+MSIX identity required by Windows for background lighting control. Keep Dynamic
+Lighting enabled, then place LightController first under Settings > Personalization
+> Dynamic Lighting > Background light control. LightController does not call the
+ASUS Aura SDK or Armoury Crate; all effects and color frames originate in this app.
 
 ## Diagnostics
 
@@ -71,13 +72,13 @@ Cycle the keyboard and available Windows Dynamic Lighting chassis through test
 colors for six seconds:
 
 ```powershell
-.\build\Release\IROKLightCtrl.exe --self-test 6
+.\build\Release\LightController.exe --self-test 6
 ```
 
 Test only the AM INFINITY 8K receiver RGB and restore its previous effect:
 
 ```powershell
-.\build\Release\IROKLightCtrl.exe --receiver-self-test 4
+.\build\Release\LightController.exe --receiver-self-test 4
 ```
 
 ## License

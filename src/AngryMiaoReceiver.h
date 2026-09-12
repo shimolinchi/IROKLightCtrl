@@ -8,7 +8,7 @@
 
 #include <array>
 
-namespace als {
+namespace lightctrl {
 
 class AngryMiaoReceiver final {
 public:
@@ -66,4 +66,4 @@ private:
     bool hasLastColor_{};
 };
 
-}  // namespace als
+}  // namespace lightctrl

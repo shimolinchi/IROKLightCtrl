@@ -10,10 +10,10 @@
 #include <sstream>
 #include <utility>
 
-namespace als {
+namespace lightctrl {
 namespace {
 
-constexpr wchar_t kWindowClass[] = L"IROKLightCtrl.MainWindow";
+constexpr wchar_t kWindowClass[] = L"LightController.MainWindow";
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kShowMessage = WM_APP + 2;
 constexpr UINT_PTR kAnimationTimer = 1;
@@ -52,6 +52,8 @@ enum TargetId : int {
     kReconnect = 40,
     kOpenDynamicLighting,
     kOpenLog,
+    kThemeDark,
+    kThemeLight,
     kStartupToggle,
     kPause,
     kExit,
@@ -63,17 +65,10 @@ enum UiIcon : int {
     kIconDevices,
     kIconKeyboard,
     kIconChassis,
-    kIconAura,
 };
 
-constexpr COLORREF kBrandLight = RGB(255, 155, 111);
-constexpr COLORREF kBrand = RGB(242, 110, 62);
-constexpr COLORREF kBrandDark = RGB(222, 82, 35);
-constexpr COLORREF kText = RGB(34, 34, 34);
-constexpr COLORREF kHint = RGB(106, 114, 130);
-constexpr COLORREF kLine = RGB(232, 232, 235);
-constexpr COLORREF kSoft = RGB(247, 247, 249);
-constexpr COLORREF kPeach = RGB(255, 241, 234);
+constexpr COLORREF kBrand = RGB(249, 115, 22);
+constexpr COLORREF kBrandDark = RGB(234, 88, 12);
 constexpr COLORREF kReady = RGB(34, 178, 112);
 constexpr COLORREF kWaiting = RGB(242, 151, 54);
 
@@ -142,7 +137,9 @@ void FillGradient(HDC context, const RECT& bounds, COLORREF first, COLORREF seco
 }  // namespace
 
 TrayApp::TrayApp(HINSTANCE instance)
-    : instance_(instance), settings_(Settings::Load()), engine_(settings_) {}
+    : instance_(instance), settings_(Settings::Load()), engine_(settings_) {
+    RefreshPalette();
+}
 
 TrayApp::~TrayApp() {
     RemoveTrayIcon();
@@ -198,7 +195,7 @@ bool TrayApp::CreateMainWindow() {
     const int y = (GetSystemMetrics(SM_CYSCREEN) - height) / 2;
     window_ = CreateWindowExW(0,
                               kWindowClass,
-                              L"IROKLightCtrl - IROK MG75 PRO",
+                              L"LightController - IROK MG75 PRO",
                               WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                               x,
                               y,
@@ -216,13 +213,51 @@ bool TrayApp::CreateMainWindow() {
     dpi_ = GetDpiForWindow(window_);
     CreateFonts();
 
-    const COLORREF caption = kBrand;
-    const COLORREF captionText = RGB(255, 255, 255);
-    const COLORREF border = kBrandDark;
-    DwmSetWindowAttribute(window_, DWMWA_CAPTION_COLOR, &caption, sizeof(caption));
-    DwmSetWindowAttribute(window_, DWMWA_TEXT_COLOR, &captionText, sizeof(captionText));
-    DwmSetWindowAttribute(window_, DWMWA_BORDER_COLOR, &border, sizeof(border));
+    ApplyWindowTheme();
     return true;
+}
+
+void TrayApp::RefreshPalette() {
+    if (settings_.themeMode == ThemeMode::Light) {
+        palette_ = {
+            RGB(244, 244, 245), RGB(228, 228, 231), RGB(250, 250, 250),
+            RGB(250, 250, 250), RGB(255, 255, 255), RGB(255, 255, 255),
+            RGB(244, 244, 245), RGB(255, 247, 237), RGB(228, 228, 231),
+            RGB(24, 24, 27), RGB(113, 113, 122), RGB(161, 161, 170),
+            RGB(228, 228, 231), RGB(255, 247, 237), RGB(194, 65, 12),
+            RGB(255, 247, 237), RGB(154, 52, 18), RGB(255, 255, 255),
+            RGB(63, 63, 70), RGB(82, 82, 91), RGB(212, 212, 216),
+            RGB(228, 228, 231), RGB(212, 212, 216), RGB(161, 161, 170),
+            RGB(255, 255, 255), RGB(249, 115, 22), RGB(255, 255, 255),
+            RGB(234, 88, 12)};
+        return;
+    }
+
+    palette_ = {
+        RGB(39, 39, 42), RGB(24, 24, 27), RGB(32, 32, 35),
+        RGB(24, 24, 27), RGB(32, 32, 35), RGB(39, 39, 42),
+        RGB(48, 48, 52), RGB(67, 45, 35), RGB(63, 63, 70),
+        RGB(250, 250, 250), RGB(161, 161, 170), RGB(113, 113, 122),
+        RGB(63, 63, 70), RGB(67, 45, 35), RGB(253, 186, 116),
+        RGB(60, 41, 32), RGB(253, 186, 116), RGB(48, 48, 52),
+        RGB(212, 212, 216), RGB(161, 161, 170), RGB(82, 82, 91),
+        RGB(63, 63, 70), RGB(82, 82, 91), RGB(113, 113, 122),
+        RGB(250, 250, 250), RGB(24, 24, 27), RGB(250, 250, 250),
+        RGB(63, 63, 70)};
+}
+
+void TrayApp::ApplyWindowTheme() {
+    if (!window_) {
+        return;
+    }
+    const BOOL dark = settings_.themeMode == ThemeMode::Dark;
+    DwmSetWindowAttribute(window_, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    DwmSetWindowAttribute(
+        window_, DWMWA_CAPTION_COLOR, &palette_.caption, sizeof(palette_.caption));
+    DwmSetWindowAttribute(
+        window_, DWMWA_TEXT_COLOR, &palette_.captionText, sizeof(palette_.captionText));
+    DwmSetWindowAttribute(
+        window_, DWMWA_BORDER_COLOR, &palette_.captionBorder, sizeof(palette_.captionBorder));
 }
 
 void TrayApp::CreateFonts() {
@@ -465,7 +500,7 @@ void TrayApp::DestroyBackBuffer() {
 void TrayApp::DrawInterface(HDC context, const RECT& client) {
     hitTargets_.clear();
     SetBkMode(context, TRANSPARENT);
-    FillGradient(context, client, kBrandLight, kBrand);
+    FillGradient(context, client, palette_.backgroundTop, palette_.backgroundBottom);
 
     DrawHeader(context, client);
 
@@ -502,41 +537,36 @@ void TrayApp::DrawInterface(HDC context, const RECT& client) {
 
 void TrayApp::DrawHeader(HDC context, const RECT& client) {
     DrawLabel(context,
-              L"IROK",
-              {Scale(25), Scale(10), Scale(130), Scale(54)},
+              L"LightController",
+              {Scale(25), Scale(10), Scale(245), Scale(54)},
               brandFont_,
-              RGB(255, 255, 255));
-    DrawLabel(context,
-              L"LightCtrl",
-              {Scale(128), Scale(16), Scale(255), Scale(52)},
-              headingFont_,
-              RGB(255, 247, 243));
+              settings_.themeMode == ThemeMode::Dark ? palette_.captionText : kBrandDark);
     DrawLabel(context,
               L"MG75 PRO 与 Windows 灯光控制中心",
               {Scale(265), Scale(13), Scale(610), Scale(52)},
               bodyFont_,
-              RGB(255, 240, 233));
+              settings_.themeMode == ThemeMode::Dark ? RGB(199, 201, 207) : palette_.navText);
 
     const EngineStatus status = engine_.Status();
     const bool ready = status.keyboardReady && status.audioReady &&
-                       (status.dynamicLightingAvailable > 0 || status.auraReady);
+                       status.dynamicLightingAvailable > 0;
     const int pillWidth = Scale(250);
     const RECT pill{client.right - Scale(18) - pillWidth,
                     Scale(14),
                     client.right - Scale(18),
                     Scale(52)};
-    FillRounded(context, pill, RGB(255, 242, 236), Scale(8));
+    FillRounded(context, pill, palette_.accentSoft, Scale(8));
     DrawStatusDot(context, {pill.left + Scale(18), (pill.top + pill.bottom) / 2}, ready);
     DrawLabel(context,
               StatusText(),
               {pill.left + Scale(32), pill.top, pill.right - Scale(12), pill.bottom},
               smallFont_,
-              RGB(117, 63, 43),
+              palette_.accentSoftText,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
 void TrayApp::DrawNavigation(HDC context, const RECT& bounds) {
-    FillRounded(context, bounds, RGB(255, 247, 243), Scale(8));
+    FillRounded(context, bounds, palette_.navigation, Scale(8));
 
     struct Item {
         int id;
@@ -561,9 +591,9 @@ void TrayApp::DrawNavigation(HDC context, const RECT& bounds) {
         if (selected || hovered) {
             FillRounded(context,
                         itemBounds,
-                        selected ? RGB(255, 255, 255) : RGB(255, 238, 229),
+                        selected ? palette_.selectedNav : palette_.surfaceHover,
                         Scale(8),
-                        selected ? std::optional<COLORREF>(RGB(255, 220, 204)) : std::nullopt);
+                        selected ? std::optional<COLORREF>(palette_.border) : std::nullopt);
         }
         if (selected) {
             RECT marker{itemBounds.left, itemBounds.top + Scale(14), itemBounds.left + Scale(3),
@@ -574,13 +604,13 @@ void TrayApp::DrawNavigation(HDC context, const RECT& bounds) {
                               itemBounds.top + Scale(10),
                               itemBounds.left + Scale(50),
                               itemBounds.top + Scale(32)};
-        DrawIcon(context, item.icon, iconBounds, selected ? kBrand : RGB(112, 101, 96));
+        DrawIcon(context, item.icon, iconBounds, selected ? kBrand : palette_.navIcon);
         DrawLabel(context,
                   item.label,
                   {itemBounds.left + Scale(4), itemBounds.top + Scale(38), itemBounds.right - Scale(4),
                    itemBounds.bottom - Scale(5)},
                   smallFont_,
-                  selected ? kBrandDark : RGB(86, 79, 76),
+                  selected ? palette_.accentSoftText : palette_.navText,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         AddHitTarget(item.id, itemBounds);
         top += Scale(82);
@@ -595,40 +625,40 @@ void TrayApp::DrawNavigation(HDC context, const RECT& bounds) {
               {bounds.left + Scale(30), bounds.bottom - Scale(60), bounds.right - Scale(7),
                bounds.bottom - Scale(34)},
               smallFont_,
-              kHint,
+              palette_.hint,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     DrawLabel(context,
               L"v0.2",
               {bounds.left + Scale(12), bounds.bottom - Scale(31), bounds.right - Scale(12),
                bounds.bottom - Scale(10)},
               smallFont_,
-              RGB(171, 149, 139),
+              palette_.hint,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
 void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& panel) {
-    FillRounded(context, workspace, RGB(255, 250, 248), Scale(8));
-    FillRounded(context, panel, RGB(255, 255, 255), Scale(8));
+    FillRounded(context, workspace, palette_.workspace, Scale(8));
+    FillRounded(context, panel, palette_.panel, Scale(8));
 
     DrawLabel(context,
               L"IROK MG75 PRO",
               {workspace.left + Scale(26), workspace.top + Scale(18), workspace.right - Scale(170),
                workspace.top + Scale(53)},
               titleFont_,
-              kText,
+              palette_.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     DrawLabel(context,
               L"灯光预览",
               {workspace.left + Scale(27), workspace.top + Scale(53), workspace.right - Scale(150),
                workspace.top + Scale(78)},
               smallFont_,
-              kHint);
+              palette_.hint);
 
     const RECT modeBadge{workspace.right - Scale(150),
                          workspace.top + Scale(22),
                          workspace.right - Scale(24),
                          workspace.top + Scale(57)};
-    FillRounded(context, modeBadge, kPeach, Scale(8));
+    FillRounded(context, modeBadge, palette_.accentSoft, Scale(8));
     DrawLabel(context,
               LightingModeName(engine_.GetLightingMode()),
               modeBadge,
@@ -655,7 +685,7 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
               {palette.left, palette.bottom + Scale(8), workspace.right - Scale(27),
                workspace.bottom - Scale(18)},
               smallFont_,
-              kHint,
+              palette_.hint,
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
     const int left = panel.left + Scale(22);
@@ -665,9 +695,9 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
               L"灯效设置",
               {left, y, right, y + Scale(35)},
               titleFont_,
-              kText);
+              palette_.text);
     y += Scale(51);
-    DrawLabel(context, L"灯效类型", {left, y, right, y + Scale(24)}, headingFont_, kText);
+    DrawLabel(context, L"灯效类型", {left, y, right, y + Scale(24)}, headingFont_, palette_.text);
     y += Scale(29);
 
     const int gap = Scale(8);
@@ -706,7 +736,7 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
                                 lightingMode == LightingMode::Breathing || paletteEnabled;
     const bool speedEnabled = lightingMode == LightingMode::Breathing || paletteEnabled;
 
-    DrawLabel(context, L"灯光颜色", {left, y, right, y + Scale(23)}, headingFont_, kText);
+    DrawLabel(context, L"灯光颜色", {left, y, right, y + Scale(23)}, headingFont_, palette_.text);
     y += Scale(28);
     DrawColorSwatch(context,
                     kPrimaryColor,
@@ -724,7 +754,7 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
               L"亮度",
               {left, y, right - Scale(55), y + Scale(22)},
               headingFont_,
-              kText);
+              palette_.text);
     DrawLabel(context,
               std::to_wstring(engine_.GetMaxBrightness()) + L"%",
               {right - Scale(54), y, right, y + Scale(22)},
@@ -744,12 +774,12 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
               L"速度",
               {left, y, right - Scale(55), y + Scale(22)},
               headingFont_,
-              speedEnabled ? kText : RGB(175, 175, 179));
+              speedEnabled ? palette_.text : palette_.disabledText);
     DrawLabel(context,
               std::to_wstring(engine_.GetEffectSpeed()),
               {right - Scale(54), y, right, y + Scale(22)},
               smallFont_,
-              speedEnabled ? kBrandDark : RGB(180, 180, 184),
+              speedEnabled ? kBrandDark : palette_.disabledText,
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
     y += Scale(22);
     DrawSlider(context,
@@ -761,7 +791,7 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
                speedEnabled);
     y += Scale(39);
 
-    DrawLabel(context, L"方向", {left, y, right, y + Scale(22)}, headingFont_, kText);
+    DrawLabel(context, L"方向", {left, y, right, y + Scale(22)}, headingFont_, palette_.text);
     y += Scale(26);
     DrawButton(context,
                kDirectionForward,
@@ -781,7 +811,7 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
                           panel.bottom - Scale(56),
                           right,
                           panel.bottom - Scale(18)};
-        FillRounded(context, footer, RGB(249, 249, 250), Scale(8));
+        FillRounded(context, footer, palette_.surfaceAlt, Scale(8));
         DrawStatusDot(context,
                       {footer.left + Scale(15), (footer.top + footer.bottom) / 2},
                       !engine_.IsPaused());
@@ -789,27 +819,27 @@ void TrayApp::DrawLightingPage(HDC context, const RECT& workspace, const RECT& p
                   engine_.IsPaused() ? L"灯光输出已暂停" : L"全部在线设备已应用",
                   {footer.left + Scale(29), footer.top, footer.right - Scale(8), footer.bottom},
                   smallFont_,
-                  kHint,
+                  palette_.hint,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
 }
 
 void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& panel) {
-    FillRounded(context, workspace, RGB(255, 250, 248), Scale(8));
-    FillRounded(context, panel, RGB(255, 255, 255), Scale(8));
+    FillRounded(context, workspace, palette_.workspace, Scale(8));
+    FillRounded(context, panel, palette_.panel, Scale(8));
 
     DrawLabel(context,
               L"音乐律动",
               {workspace.left + Scale(26), workspace.top + Scale(18), workspace.right - Scale(26),
                workspace.top + Scale(53)},
               titleFont_,
-              kText);
+              palette_.text);
     DrawLabel(context,
               L"WASAPI 系统音频实时响应",
               {workspace.left + Scale(27), workspace.top + Scale(53), workspace.right - Scale(26),
                workspace.top + Scale(78)},
               smallFont_,
-              kHint);
+              palette_.hint);
 
     const RECT visualizer{workspace.left + Scale(28),
                           workspace.top + Scale(105),
@@ -823,7 +853,7 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
               {workspace.left + Scale(28), workspace.bottom - Scale(106), workspace.right - Scale(180),
                workspace.bottom - Scale(79)},
               headingFont_,
-              kText);
+              palette_.text);
     DrawLabel(context,
               std::to_wstring(static_cast<int>(std::lround(
                   std::clamp(status.audioLevel, 0.0F, 1.0F) * 100.0F))) +
@@ -838,7 +868,7 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
               {workspace.left + Scale(28), workspace.bottom - Scale(68), workspace.right - Scale(28),
                workspace.bottom - Scale(31)},
               smallFont_,
-              kHint,
+              palette_.hint,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     const int left = panel.left + Scale(22);
@@ -849,10 +879,10 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
               L"音频设置",
               {left, y, right, y + Scale(35)},
               titleFont_,
-              kText);
+              palette_.text);
     y += Scale(51);
 
-    DrawLabel(context, L"色彩映射", {left, y, right, y + Scale(23)}, headingFont_, kText);
+    DrawLabel(context, L"色彩映射", {left, y, right, y + Scale(23)}, headingFont_, palette_.text);
     y += Scale(28);
     const int half = (right - left - gap) / 2;
     DrawButton(context,
@@ -867,7 +897,7 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
                engine_.GetAudioColorMode() == AudioColorMode::GradientCycle);
     y += Scale(52);
 
-    DrawLabel(context, L"灵敏度", {left, y, right, y + Scale(23)}, headingFont_, kText);
+    DrawLabel(context, L"灵敏度", {left, y, right, y + Scale(23)}, headingFont_, palette_.text);
     y += Scale(28);
     const int thirdGap = Scale(6);
     const int third = (right - left - thirdGap * 2) / 3;
@@ -891,7 +921,7 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
     y += Scale(14);
 
     const bool custom = engine_.GetAudioColorMode() == AudioColorMode::GradientCycle;
-    DrawLabel(context, L"循环色域", {left, y, right, y + Scale(23)}, headingFont_, kText);
+    DrawLabel(context, L"循环色域", {left, y, right, y + Scale(23)}, headingFont_, palette_.text);
     y += Scale(28);
     DrawColorSwatch(context,
                     kPrimaryColor,
@@ -909,12 +939,12 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
               L"循环速度",
               {left, y, right - Scale(55), y + Scale(22)},
               headingFont_,
-              custom ? kText : RGB(175, 175, 179));
+              custom ? palette_.text : palette_.disabledText);
     DrawLabel(context,
               std::to_wstring(engine_.GetEffectSpeed()),
               {right - Scale(54), y, right, y + Scale(22)},
               smallFont_,
-              custom ? kBrandDark : RGB(180, 180, 184),
+              custom ? kBrandDark : palette_.disabledText,
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
     y += Scale(22);
     DrawSlider(context,
@@ -932,7 +962,7 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
               L"活动灯效",
               {left, y, right - Scale(58), y + Scale(30)},
               bodyFont_,
-              kText,
+              palette_.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     DrawToggle(context,
                kEnableAudio,
@@ -945,7 +975,7 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
                           panel.bottom - Scale(56),
                           right,
                           panel.bottom - Scale(18)};
-        FillRounded(context, footer, RGB(249, 249, 250), Scale(8));
+        FillRounded(context, footer, palette_.surfaceAlt, Scale(8));
         DrawStatusDot(context,
                       {footer.left + Scale(15), (footer.top + footer.bottom) / 2},
                       status.audioReady);
@@ -953,27 +983,27 @@ void TrayApp::DrawAudioPage(HDC context, const RECT& workspace, const RECT& pane
                   status.audioReady ? L"音频采集正常" : L"正在等待音频设备",
                   {footer.left + Scale(29), footer.top, footer.right - Scale(8), footer.bottom},
                   smallFont_,
-                  kHint,
+                  palette_.hint,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
 }
 
 void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& panel) {
-    FillRounded(context, workspace, RGB(255, 250, 248), Scale(8));
-    FillRounded(context, panel, RGB(255, 255, 255), Scale(8));
+    FillRounded(context, workspace, palette_.workspace, Scale(8));
+    FillRounded(context, panel, palette_.panel, Scale(8));
 
     DrawLabel(context,
               L"设备状态",
               {workspace.left + Scale(26), workspace.top + Scale(18), workspace.right - Scale(26),
                workspace.top + Scale(53)},
               titleFont_,
-              kText);
+              palette_.text);
     DrawLabel(context,
               L"IROK 键盘、AM 接收器与 Windows 灯光服务",
               {workspace.left + Scale(27), workspace.top + Scale(53), workspace.right - Scale(26),
                workspace.top + Scale(78)},
               smallFont_,
-              kHint);
+              palette_.hint);
 
     const EngineStatus status = engine_.Status();
     const int gap = Scale(14);
@@ -1012,16 +1042,6 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                    kIconChassis);
     DrawDeviceCard(context,
                    {left + cardWidth + gap, rowTwo, right, rowTwo + cardHeight},
-                   L"ASUS Aura",
-                   status.auraStatus.empty()
-                       ? (status.auraReady ? L"Aura SDK 已连接" : L"等待 Aura SDK")
-                       : status.auraStatus,
-                   status.auraReady,
-                   kIconAura);
-
-    const int rowThree = rowTwo + cardHeight + gap;
-    DrawDeviceCard(context,
-                   {left, rowThree, left + cardWidth, rowThree + cardHeight},
                    L"AM INFINITY 8K 接收器",
                    status.angryMiaoReceiverName.empty() ? L"等待 USB HID 接收器"
                                                         : status.angryMiaoReceiverName,
@@ -1032,12 +1052,12 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                     workspace.bottom - Scale(98),
                     right,
                     workspace.bottom - Scale(31)};
-    FillRounded(context, note, RGB(255, 241, 234), Scale(8));
+    FillRounded(context, note, palette_.note, Scale(8));
     DrawLabel(context,
-              L"输出目标  IROK MG75 PRO  ·  AM INFINITY 8K  ·  Windows 动态光效  ·  ASUS Aura",
+              L"输出目标  IROK MG75 PRO  ·  AM INFINITY 8K  ·  Windows 动态光效",
               {note.left + Scale(17), note.top + Scale(8), note.right - Scale(17), note.bottom - Scale(8)},
               bodyFont_,
-              RGB(117, 63, 43),
+              palette_.noteText,
               DT_LEFT | DT_VCENTER | DT_WORDBREAK);
 
     const int panelLeft = panel.left + Scale(22);
@@ -1047,9 +1067,9 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
               L"设备与应用",
               {panelLeft, y, panelRight, y + Scale(35)},
               titleFont_,
-              kText);
+              palette_.text);
     y += Scale(54);
-    DrawLabel(context, L"连接", {panelLeft, y, panelRight, y + Scale(23)}, headingFont_, kText);
+    DrawLabel(context, L"连接", {panelLeft, y, panelRight, y + Scale(23)}, headingFont_, palette_.text);
     y += Scale(30);
     DrawButton(context,
                kReconnect,
@@ -1070,10 +1090,32 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
     y += Scale(16);
 
     DrawLabel(context,
+              L"界面主题",
+              {panelLeft, y, panelRight, y + Scale(23)},
+              headingFont_,
+              palette_.text);
+    y += Scale(29);
+    const int themeGap = Scale(8);
+    const int themeHalf = (panelRight - panelLeft - themeGap) / 2;
+    DrawButton(context,
+               kThemeDark,
+               {panelLeft, y, panelLeft + themeHalf, y + Scale(36)},
+               L"暗色",
+               settings_.themeMode == ThemeMode::Dark);
+    DrawButton(context,
+               kThemeLight,
+               {panelLeft + themeHalf + themeGap, y, panelRight, y + Scale(36)},
+               L"亮色",
+               settings_.themeMode == ThemeMode::Light);
+    y += Scale(52);
+    DrawSeparator(context, panelLeft, panelRight, y);
+    y += Scale(15);
+
+    DrawLabel(context,
               L"随 Windows 启动",
               {panelLeft, y, panelRight - Scale(58), y + Scale(30)},
               bodyFont_,
-              kText);
+              palette_.text);
     DrawToggle(context,
                kStartupToggle,
                {panelRight - Scale(45), y + Scale(3), panelRight, y + Scale(27)},
@@ -1085,7 +1127,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
               L"灯光同步",
               {panelLeft, y, panelRight - Scale(58), y + Scale(30)},
               bodyFont_,
-              kText);
+              palette_.text);
     DrawToggle(context,
                kPause,
                {panelRight - Scale(45), y + Scale(3), panelRight, y + Scale(27)},
@@ -1095,7 +1137,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
     DrawButton(context,
                kExit,
                {panelLeft, panel.bottom - Scale(56), panelRight, panel.bottom - Scale(18)},
-               L"退出 IROKLightCtrl");
+               L"退出 LightController");
 }
 
 void TrayApp::DrawKeyboard(HDC context, const RECT& bounds) {
@@ -1231,12 +1273,18 @@ void TrayApp::DrawDeviceCard(HDC context,
                              const std::wstring& detail,
                              bool ready,
                              int icon) {
-    FillRounded(context, bounds, RGB(255, 255, 255), Scale(8), RGB(235, 232, 231));
+    FillRounded(context, bounds, palette_.surface, Scale(8), palette_.border);
     const RECT iconTile{bounds.left + Scale(16),
                         bounds.top + Scale(17),
                         bounds.left + Scale(55),
                         bounds.top + Scale(56)};
-    FillRounded(context, iconTile, ready ? RGB(235, 249, 242) : RGB(255, 244, 230), Scale(7));
+    const COLORREF readyTile = settings_.themeMode == ThemeMode::Dark
+                                   ? RGB(28, 64, 52)
+                                   : RGB(235, 249, 242);
+    const COLORREF waitingTile = settings_.themeMode == ThemeMode::Dark
+                                     ? RGB(71, 50, 30)
+                                     : RGB(255, 244, 230);
+    FillRounded(context, iconTile, ready ? readyTile : waitingTile, Scale(7));
     DrawIcon(context, icon, {iconTile.left + Scale(9), iconTile.top + Scale(9),
                              iconTile.right - Scale(9), iconTile.bottom - Scale(9)},
              ready ? kReady : kWaiting);
@@ -1246,7 +1294,7 @@ void TrayApp::DrawDeviceCard(HDC context,
               {bounds.left + Scale(67), bounds.top + Scale(14), bounds.right - Scale(31),
                bounds.top + Scale(43)},
               headingFont_,
-              kText,
+              palette_.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     DrawLabel(context,
               ready ? L"已连接" : L"等待连接",
@@ -1260,7 +1308,7 @@ void TrayApp::DrawDeviceCard(HDC context,
               {bounds.left + Scale(16), bounds.top + Scale(76), bounds.right - Scale(16),
                bounds.bottom - Scale(12)},
               smallFont_,
-              kHint,
+              palette_.hint,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 }
 
@@ -1311,20 +1359,20 @@ void TrayApp::DrawButton(HDC context,
                          bool selected,
                          bool enabled) {
     const bool hovered = enabled && hoveredTarget_ == id;
-    COLORREF fill = kSoft;
-    COLORREF border = RGB(231, 231, 234);
-    COLORREF color = kText;
+    COLORREF fill = palette_.surfaceAlt;
+    COLORREF border = palette_.border;
+    COLORREF color = palette_.text;
     if (!enabled) {
-        fill = RGB(249, 249, 250);
-        color = RGB(183, 183, 187);
+        fill = palette_.panel;
+        color = palette_.disabledText;
     } else if (selected) {
         fill = kBrand;
         border = kBrandDark;
         color = RGB(255, 255, 255);
     } else if (hovered) {
-        fill = kPeach;
-        border = RGB(255, 198, 174);
-        color = kBrandDark;
+        fill = palette_.surfaceHover;
+        border = kBrand;
+        color = palette_.accentSoftText;
     }
     FillRounded(context, bounds, fill, Scale(7), border);
     DrawLabel(context,
@@ -1354,19 +1402,22 @@ void TrayApp::DrawSlider(HDC context,
     const int knobX = trackLeft +
                       static_cast<int>(std::lround((trackRight - trackLeft) * amount));
     const RECT track{trackLeft, center - Scale(3), trackRight, center + Scale(3)};
-    FillRounded(context, track, enabled ? RGB(225, 225, 229) : RGB(237, 237, 239), Scale(3));
+    FillRounded(context,
+                track,
+                enabled ? palette_.track : palette_.trackDisabled,
+                Scale(3));
     if (knobX > trackLeft) {
         FillRounded(context,
                     {trackLeft, track.top, knobX, track.bottom},
-                    enabled ? kBrand : RGB(205, 205, 209),
+                    enabled ? kBrand : palette_.disabledText,
                     Scale(3));
     }
 
-    HBRUSH brush = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH brush = CreateSolidBrush(palette_.knob);
     HPEN pen = CreatePen(PS_SOLID,
                          Scale(2),
                          enabled ? (hoveredTarget_ == id ? kBrandDark : kBrand)
-                                 : RGB(202, 202, 206));
+                                 : palette_.disabledText);
     HGDIOBJ oldBrush = SelectObject(context, brush);
     HGDIOBJ oldPen = SelectObject(context, pen);
     Ellipse(context,
@@ -1388,11 +1439,11 @@ void TrayApp::DrawToggle(HDC context, int id, const RECT& bounds, bool checked) 
     FillRounded(context,
                 bounds,
                 checked ? (hovered ? kBrandDark : kBrand)
-                        : (hovered ? RGB(207, 207, 212) : RGB(221, 221, 225)),
+                        : (hovered ? palette_.toggleOffHover : palette_.toggleOff),
                 (bounds.bottom - bounds.top) / 2);
     const int diameter = bounds.bottom - bounds.top - Scale(6);
     const int left = checked ? bounds.right - Scale(3) - diameter : bounds.left + Scale(3);
-    HBRUSH knob = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH knob = CreateSolidBrush(palette_.knob);
     HGDIOBJ oldBrush = SelectObject(context, knob);
     HGDIOBJ oldPen = SelectObject(context, GetStockObject(NULL_PEN));
     Ellipse(context,
@@ -1411,8 +1462,9 @@ void TrayApp::DrawColorSwatch(HDC context,
                               const RECT& bounds,
                               RgbColor color,
                               bool enabled) {
-    RgbColor displayed = enabled ? color : BlendColor(color, {242, 242, 244}, 0.72F);
-    const COLORREF border = hoveredTarget_ == id && enabled ? kBrandDark : RGB(224, 224, 228);
+    const RgbColor disabledSurface = FromColorRef(palette_.surfaceAlt);
+    RgbColor displayed = enabled ? color : BlendColor(color, disabledSurface, 0.72F);
+    const COLORREF border = hoveredTarget_ == id && enabled ? kBrandDark : palette_.border;
     FillRounded(context, bounds, ToColorRef(displayed), Scale(7), border);
     const int luminance = displayed.r * 299 + displayed.g * 587 + displayed.b * 114;
     DrawLabel(context,
@@ -1428,7 +1480,7 @@ void TrayApp::DrawColorSwatch(HDC context,
 
 void TrayApp::DrawSeparator(HDC context, int left, int right, int y) {
     RECT line{left, y, right, y + 1};
-    HBRUSH brush = CreateSolidBrush(kLine);
+    HBRUSH brush = CreateSolidBrush(palette_.line);
     FillRect(context, &line, brush);
     DeleteObject(brush);
 }
@@ -1608,6 +1660,18 @@ void TrayApp::HandleClick(int id) {
                           nullptr,
                           SW_SHOWNORMAL);
             break;
+        case kThemeDark:
+        case kThemeLight: {
+            const ThemeMode theme = id == kThemeDark ? ThemeMode::Dark : ThemeMode::Light;
+            if (settings_.themeMode != theme) {
+                settings_.themeMode = theme;
+                settings_.Save();
+                RefreshPalette();
+                ApplyWindowTheme();
+                DestroyBackBuffer();
+            }
+            break;
+        }
         case kStartupToggle:
             SetStartupEnabled(!IsStartupEnabled());
             break;
@@ -1693,7 +1757,7 @@ void TrayApp::AddTrayIcon() {
     trayIcon_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     trayIcon_.uCallbackMessage = kTrayMessage;
     trayIcon_.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-    wcscpy_s(trayIcon_.szTip, L"IROKLightCtrl 正在启动");
+    wcscpy_s(trayIcon_.szTip, L"LightController 正在启动");
     Shell_NotifyIconW(NIM_ADD, &trayIcon_);
     trayIcon_.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &trayIcon_);
@@ -1715,7 +1779,7 @@ void TrayApp::UpdateTrayIcon(bool showBalloon) {
     wcsncpy_s(trayIcon_.szTip, tooltip.c_str(), _TRUNCATE);
     if (showBalloon) {
         trayIcon_.uFlags |= NIF_INFO;
-        wcscpy_s(trayIcon_.szInfoTitle, L"IROKLightCtrl");
+        wcscpy_s(trayIcon_.szInfoTitle, L"LightController");
         wcscpy_s(trayIcon_.szInfo, L"灯光同步已在后台启动。");
         trayIcon_.dwInfoFlags = NIIF_INFO;
     }
@@ -1724,7 +1788,7 @@ void TrayApp::UpdateTrayIcon(bool showBalloon) {
 
 void TrayApp::ShowMenu(POINT position) {
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, kCommandOpen, L"打开 IROKLightCtrl");
+    AppendMenuW(menu, MF_STRING, kCommandOpen, L"打开 LightController");
     AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, StatusText().c_str());
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kCommandPause, engine_.IsPaused() ? L"继续同步" : L"暂停同步");
@@ -1792,11 +1856,11 @@ void TrayApp::HandleTrayCommand(UINT command) {
 std::wstring TrayApp::Tooltip() const {
     const EngineStatus status = engine_.Status();
     if (status.paused) {
-        return L"IROKLightCtrl | 已暂停";
+        return L"LightController | 已暂停";
     }
-    return L"IROKLightCtrl | 音频 " + std::wstring(status.audioReady ? L"正常" : L"等待") +
+    return L"LightController | 音频 " + std::wstring(status.audioReady ? L"正常" : L"等待") +
            L" | 键盘 " + (status.keyboardReady ? L"正常" : L"等待") + L" | 机箱 " +
-           ((status.dynamicLightingAvailable > 0 || status.auraReady) ? L"正常" : L"等待");
+           (status.dynamicLightingAvailable > 0 ? L"正常" : L"等待");
 }
 
 std::wstring TrayApp::StatusText() const {
@@ -1807,7 +1871,7 @@ std::wstring TrayApp::StatusText() const {
     if (status.paused) {
         return L"同步已暂停";
     }
-    const bool chassisReady = status.dynamicLightingAvailable > 0 || status.auraReady;
+    const bool chassisReady = status.dynamicLightingAvailable > 0;
     return L"音频 " + std::wstring(status.audioReady ? L"正常" : L"等待") + L"  |  键盘 " +
            (status.keyboardReady ? L"正常" : L"等待") + L"  |  机箱 " +
            (chassisReady ? L"正常" : L"等待");
@@ -1817,4 +1881,4 @@ int TrayApp::Scale(int value) const {
     return MulDiv(value, static_cast<int>(dpi_), 96);
 }
 
-}  // namespace als
+}  // namespace lightctrl

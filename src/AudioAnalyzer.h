@@ -5,7 +5,7 @@
 #include <array>
 #include <complex>
 
-namespace als {
+namespace lightctrl {
 
 class AudioAnalyzer final {
 public:
@@ -33,4 +33,4 @@ private:
     std::atomic<float> lastLevel_{};
 };
 
-}  // namespace als
+}  // namespace lightctrl

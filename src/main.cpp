@@ -1,12 +1,12 @@
 #include "AudioCapture.h"
 #include "AngryMiaoReceiver.h"
-#include "AuraController.h"
 #include "IrokKeyboard.h"
 #include "LampArrayController.h"
 #include "Logger.h"
 #include "TrayApp.h"
 
 #include <Shellapi.h>
+#include <appmodel.h>
 #include <objbase.h>
 
 #include <fstream>
@@ -14,7 +14,24 @@
 
 namespace {
 
-using namespace als;
+using namespace lightctrl;
+
+std::wstring CurrentPackageFullName() noexcept {
+    UINT32 length = 0;
+    if (GetCurrentPackageFullName(&length, nullptr) != ERROR_INSUFFICIENT_BUFFER || length == 0) {
+        return {};
+    }
+    std::wstring name(length, L'\0');
+    if (GetCurrentPackageFullName(&length, name.data()) != ERROR_SUCCESS) {
+        return {};
+    }
+    name.resize(length > 0 ? length - 1 : 0);
+    return name;
+}
+
+bool HasPackageIdentity() noexcept {
+    return !CurrentPackageFullName().empty();
+}
 
 std::string ToUtf8(const std::wstring& text) {
     if (text.empty()) {
@@ -129,12 +146,11 @@ int RunDiagnostics(const std::filesystem::path& outputPath) {
     lighting.Initialize();
     const std::wstring lightingError = lighting.LastError();
 
-    CLSID auraClass{};
-    const bool auraRegistered = SUCCEEDED(CLSIDFromProgID(L"aura.sdk", &auraClass));
-
     std::ostringstream json;
     json << "{\n"
-         << "  \"application\": \"IROKLightCtrl\",\n"
+         << "  \"application\": \"LightController\",\n"
+         << "  \"packageIdentity\": " << (HasPackageIdentity() ? "true" : "false") << ",\n"
+         << "  \"packageFullName\": " << JsonString(CurrentPackageFullName()) << ",\n"
          << "  \"audio\": {\n"
          << "    \"ready\": " << (audioReady ? "true" : "false") << ",\n"
          << "    \"device\": " << JsonString(audioName) << ",\n"
@@ -162,9 +178,6 @@ int RunDiagnostics(const std::filesystem::path& outputPath) {
          << "    \"usage\": " << receiverUsage << ",\n"
          << "    \"featureReportBytes\": " << receiverFeatureReport << ",\n"
          << "    \"error\": " << JsonString(receiverError) << "\n"
-         << "  },\n"
-         << "  \"aura\": {\n"
-         << "    \"sdkRegistered\": " << (auraRegistered ? "true" : "false") << "\n"
          << "  },\n"
          << "  \"log\": " << JsonString(Logger::Instance().Path().wstring()) << "\n"
          << "}\n";
@@ -225,6 +238,10 @@ int RunReceiverSelfTest(int seconds) {
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     Logger::Instance().Initialize();
+    const std::wstring packageFullName = CurrentPackageFullName();
+    Logger::Instance().Info(packageFullName.empty()
+                                ? L"Windows ambient lighting identity unavailable"
+                                : L"Windows ambient lighting identity active: " + packageFullName);
     const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const bool shouldUninitialize = SUCCEEDED(comResult);
     if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
@@ -238,7 +255,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         const std::filesystem::path output = arguments.size() >= 3
                                                  ? std::filesystem::path(arguments[2])
                                                  : std::filesystem::current_path() /
-                                                       L"IROKLightCtrl-diagnostic.json";
+                                                       L"LightController-diagnostic.json";
         result = RunDiagnostics(output);
     } else if (arguments.size() >= 2 && arguments[1] == L"--self-test") {
         int seconds = 6;
@@ -261,10 +278,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     } else {
         const bool background = std::find(arguments.begin(), arguments.end(), L"--background") !=
                                 arguments.end();
-        HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\IROKLightCtrl.Singleton");
+        HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\LightController.Singleton");
         if (!mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
             if (!background) {
-                if (HWND existing = FindWindowW(L"IROKLightCtrl.MainWindow", nullptr)) {
+                if (HWND existing = FindWindowW(L"LightController.MainWindow", nullptr)) {
                     PostMessageW(existing, WM_APP + 2, 0, 0);
                 }
             }

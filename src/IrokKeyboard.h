@@ -8,7 +8,7 @@
 
 #include <array>
 
-namespace als {
+namespace lightctrl {
 
 class IrokKeyboard final {
 public:
@@ -65,4 +65,4 @@ private:
     bool hasLastColor_{};
 };
 
-}  // namespace als
+}  // namespace lightctrl

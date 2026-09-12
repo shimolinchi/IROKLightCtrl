@@ -2,18 +2,16 @@
 
 #include "Logger.h"
 
-#include <ShlObj.h>
-
-namespace als {
+namespace lightctrl {
 namespace {
 
 int ReadInt(const std::filesystem::path& path, const wchar_t* name, int fallback) {
-    return static_cast<int>(GetPrivateProfileIntW(L"IROKLightCtrl", name, fallback, path.c_str()));
+    return static_cast<int>(GetPrivateProfileIntW(L"LightController", name, fallback, path.c_str()));
 }
 
 void WriteInt(const std::filesystem::path& path, const wchar_t* name, int value) {
     WritePrivateProfileStringW(
-        L"IROKLightCtrl", name, std::to_wstring(value).c_str(), path.c_str());
+        L"LightController", name, std::to_wstring(value).c_str(), path.c_str());
 }
 
 std::wstring ExecutablePath() {
@@ -23,18 +21,46 @@ std::wstring ExecutablePath() {
     return path;
 }
 
+ThemeMode ReadThemeMode(const std::filesystem::path& path) {
+    DWORD value = static_cast<DWORD>(std::clamp(ReadInt(path, L"ThemeMode", 0), 0, 1));
+    DWORD bytes = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER,
+                 L"Software\\LightController",
+                 L"ThemeMode",
+                 RRF_RT_REG_DWORD,
+                 nullptr,
+                 &value,
+                 &bytes);
+    return static_cast<ThemeMode>(std::clamp<DWORD>(value, 0, 1));
+}
+
+void WriteThemeMode(ThemeMode theme) {
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER,
+                        L"Software\\LightController",
+                        0,
+                        nullptr,
+                        0,
+                        KEY_SET_VALUE,
+                        nullptr,
+                        &key,
+                        nullptr) != ERROR_SUCCESS) {
+        return;
+    }
+    const DWORD value = static_cast<DWORD>(theme);
+    RegSetValueExW(key,
+                   L"ThemeMode",
+                   0,
+                   REG_DWORD,
+                   reinterpret_cast<const BYTE*>(&value),
+                   sizeof(value));
+    RegCloseKey(key);
+}
+
 }  // namespace
 
 std::filesystem::path Settings::FilePath() {
-    PWSTR localAppData = nullptr;
-    std::filesystem::path path;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppData))) {
-        path = std::filesystem::path(localAppData) / L"IROKLightCtrl" / L"settings.ini";
-        CoTaskMemFree(localAppData);
-    } else {
-        path = std::filesystem::temp_directory_path() / L"IROKLightCtrl.ini";
-    }
-    return path;
+    return UserLocalDataPath() / L"LightController" / L"settings.ini";
 }
 
 Settings Settings::Load() {
@@ -57,8 +83,7 @@ Settings Settings::Load() {
     value.maxBrightness = std::clamp(ReadInt(path, L"MaxBrightness", 100), 10, 100);
     value.keyboardEnabled = ReadInt(path, L"KeyboardEnabled", 1) != 0;
     value.angryMiaoReceiverEnabled = ReadInt(path, L"AngryMiaoReceiverEnabled", 1) != 0;
-    value.dynamicLightingEnabled = ReadInt(path, L"DynamicLightingEnabled", 1) != 0;
-    value.auraFallbackEnabled = ReadInt(path, L"AuraFallbackEnabled", 1) != 0;
+    value.themeMode = ReadThemeMode(path);
     if (!std::filesystem::exists(path)) {
         value.Save();
     }
@@ -79,8 +104,8 @@ void Settings::Save() const {
     WriteInt(path, L"MaxBrightness", maxBrightness);
     WriteInt(path, L"KeyboardEnabled", keyboardEnabled ? 1 : 0);
     WriteInt(path, L"AngryMiaoReceiverEnabled", angryMiaoReceiverEnabled ? 1 : 0);
-    WriteInt(path, L"DynamicLightingEnabled", dynamicLightingEnabled ? 1 : 0);
-    WriteInt(path, L"AuraFallbackEnabled", auraFallbackEnabled ? 1 : 0);
+    WriteInt(path, L"ThemeMode", static_cast<int>(themeMode));
+    WriteThemeMode(themeMode);
 }
 
 bool IsStartupEnabled() {
@@ -96,7 +121,7 @@ bool IsStartupEnabled() {
     DWORD bytes = sizeof(value);
     DWORD type = 0;
     const LSTATUS status = RegQueryValueExW(
-        key, L"IROKLightCtrl", nullptr, &type, reinterpret_cast<BYTE*>(value), &bytes);
+        key, L"LightController", nullptr, &type, reinterpret_cast<BYTE*>(value), &bytes);
     RegCloseKey(key);
     return status == ERROR_SUCCESS && (type == REG_SZ || type == REG_EXPAND_SZ);
 }
@@ -118,13 +143,13 @@ bool SetStartupEnabled(bool enabled) {
     if (enabled) {
         const std::wstring command = L"\"" + ExecutablePath() + L"\" --background";
         status = RegSetValueExW(key,
-                                L"IROKLightCtrl",
+                                L"LightController",
                                 0,
                                 REG_SZ,
                                 reinterpret_cast<const BYTE*>(command.c_str()),
                                 static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t)));
     } else {
-        status = RegDeleteValueW(key, L"IROKLightCtrl");
+        status = RegDeleteValueW(key, L"LightController");
         if (status == ERROR_FILE_NOT_FOUND) {
             status = ERROR_SUCCESS;
         }
@@ -136,4 +161,4 @@ bool SetStartupEnabled(bool enabled) {
     return status == ERROR_SUCCESS;
 }
 
-}  // namespace als
+}  // namespace lightctrl

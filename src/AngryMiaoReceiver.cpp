@@ -2,7 +2,7 @@
 
 #include "Logger.h"
 
-namespace als {
+namespace lightctrl {
 namespace {
 
 std::wstring ReadProductName(HANDLE handle) {
@@ -241,4 +241,4 @@ void AngryMiaoReceiver::SetError(const std::wstring& message) {
     Logger::Instance().Error(message);
 }
 
-}  // namespace als
+}  // namespace lightctrl

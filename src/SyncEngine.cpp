@@ -4,7 +4,7 @@
 
 #include <winrt/base.h>
 
-namespace als {
+namespace lightctrl {
 namespace {
 
 RgbColor Blend(RgbColor from, RgbColor to, float amount) {
@@ -165,7 +165,6 @@ void SyncEngine::ThreadMain() {
     IrokKeyboard keyboard;
     AngryMiaoReceiver receiver;
     LampArrayController dynamicLighting;
-    AuraController aura;
 
     auto initializeAudio = [&] {
         const bool ready = audio.Initialize(analyzer);
@@ -205,9 +204,6 @@ void SyncEngine::ThreadMain() {
         });
     };
     auto initializeDynamicLighting = [&] {
-        if (!settings_.dynamicLightingEnabled) {
-            return;
-        }
         dynamicLighting.Initialize();
         UpdateStatus([&](EngineStatus& status) {
             status.dynamicLightingDevices = static_cast<int>(dynamicLighting.DeviceCount());
@@ -219,9 +215,6 @@ void SyncEngine::ThreadMain() {
     initializeKeyboard();
     initializeReceiver();
     initializeDynamicLighting();
-    if (settings_.auraFallbackEnabled) {
-        aura.Start();
-    }
 
     UpdateStatus([&](EngineStatus& status) {
         status.running = true;
@@ -234,7 +227,9 @@ void SyncEngine::ThreadMain() {
     auto nextAudioRetry = nextFrame + std::chrono::seconds(3);
     auto nextKeyboardRetry = nextFrame + std::chrono::seconds(5);
     auto nextReceiverRetry = nextFrame + std::chrono::seconds(5);
+    auto nextDynamicLightingRetry = nextFrame + std::chrono::seconds(5);
     auto nextReceiverFrame = nextFrame;
+    std::size_t lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
     while (!stop_.load()) {
         const auto now = std::chrono::steady_clock::now();
         if (reconnect_.exchange(false)) {
@@ -250,6 +245,8 @@ void SyncEngine::ThreadMain() {
             nextAudioRetry = now + std::chrono::seconds(3);
             nextKeyboardRetry = now + std::chrono::seconds(5);
             nextReceiverRetry = now + std::chrono::seconds(5);
+            nextDynamicLightingRetry = now + std::chrono::seconds(5);
+            lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
         }
 
         if (!audio.Pump() && now >= nextAudioRetry) {
@@ -264,6 +261,10 @@ void SyncEngine::ThreadMain() {
             now >= nextReceiverRetry) {
             initializeReceiver();
             nextReceiverRetry = now + std::chrono::seconds(5);
+        }
+        if (dynamicLighting.DeviceCount() == 0 && now >= nextDynamicLightingRetry) {
+            initializeDynamicLighting();
+            nextDynamicLightingRetry = now + std::chrono::seconds(5);
         }
 
         if (now >= nextFrame) {
@@ -315,9 +316,7 @@ void SyncEngine::ThreadMain() {
                     keyboard.Close(false);
                     nextKeyboardRetry = now + std::chrono::seconds(5);
                 }
-                if (settings_.dynamicLightingEnabled) {
-                    dynamicLighting.SetColor(color);
-                }
+                dynamicLighting.SetColor(color);
                 if (settings_.angryMiaoReceiverEnabled && receiver.IsOpen() &&
                     now >= nextReceiverFrame) {
                     nextReceiverFrame = now + std::chrono::milliseconds(400);
@@ -330,9 +329,6 @@ void SyncEngine::ThreadMain() {
                         nextReceiverRetry = now + std::chrono::seconds(5);
                     }
                 }
-                if (settings_.auraFallbackEnabled) {
-                    aura.SubmitColor(color);
-                }
             }
             UpdateStatus([&](EngineStatus& status) {
                 status.paused = paused_.load();
@@ -341,12 +337,15 @@ void SyncEngine::ThreadMain() {
                 status.angryMiaoReceiverReady = receiver.IsOpen();
                 status.dynamicLightingDevices = static_cast<int>(dynamicLighting.DeviceCount());
                 status.dynamicLightingAvailable = static_cast<int>(dynamicLighting.AvailableCount());
-                status.auraReady = aura.IsReady();
-                status.auraDevices = aura.DeviceCount();
-                status.auraStatus = aura.Status();
                 status.audioLevel = analyzer.LastLevel();
                 status.color = color;
             });
+            const std::size_t available = dynamicLighting.AvailableCount();
+            if (available != lastDynamicLightingAvailable) {
+                Logger::Instance().Info(L"Windows Dynamic Lighting available chassis devices: " +
+                                        std::to_wstring(available));
+                lastDynamicLightingAvailable = available;
+            }
         }
         Sleep(5);
     }
@@ -355,13 +354,11 @@ void SyncEngine::ThreadMain() {
     receiver.Close(true);
     dynamicLighting.Close();
     audio.Close();
-    aura.Stop();
     UpdateStatus([&](EngineStatus& status) {
         status.running = false;
         status.keyboardReady = false;
         status.angryMiaoReceiverReady = false;
         status.audioReady = false;
-        status.auraReady = false;
     });
     Logger::Instance().Info(L"Synchronization engine stopped");
     if (SUCCEEDED(comResult)) {
@@ -369,4 +366,4 @@ void SyncEngine::ThreadMain() {
     }
 }
 
-}  // namespace als
+}  // namespace lightctrl

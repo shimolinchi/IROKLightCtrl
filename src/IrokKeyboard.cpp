@@ -6,7 +6,7 @@
 #include <memory>
 #include <set>
 
-namespace als {
+namespace lightctrl {
 namespace {
 
 constexpr std::array<std::uint8_t, 81> kMg75ProKeys{
@@ -412,4 +412,4 @@ void IrokKeyboard::SetError(const std::wstring& message) {
     Logger::Instance().Error(message);
 }
 
-}  // namespace als
+}  // namespace lightctrl

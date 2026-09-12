@@ -1,12 +1,12 @@
 [CmdletBinding()]
 param(
-    [string]$OutputPath = (Join-Path $env:TEMP 'IROKLightCtrl-diagnostic.json'),
+    [string]$OutputPath = (Join-Path $env:TEMP 'LightController-diagnostic.json'),
     [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$executable = Join-Path $repoRoot 'build\Release\IROKLightCtrl.exe'
+$executable = Join-Path $repoRoot 'build\Release\LightController.exe'
 
 if (-not $SkipBuild -or -not (Test-Path -LiteralPath $executable)) {
     & (Join-Path $PSScriptRoot 'build.ps1') -Configuration Release
@@ -19,7 +19,7 @@ $process = Start-Process -FilePath $executable `
     -PassThru
 
 if ($process.ExitCode -ne 0) {
-    throw "IROKLightCtrl diagnostics failed with exit code $($process.ExitCode)."
+    throw "LightController diagnostics failed with exit code $($process.ExitCode)."
 }
 
 Get-Content -LiteralPath $OutputPath -Raw

@@ -9,7 +9,7 @@
 #include <winrt/Windows.UI.h>
 #include <winrt/base.h>
 
-namespace als {
+namespace lightctrl {
 
 struct LampArrayDeviceInfo {
     std::wstring name;
@@ -38,4 +38,4 @@ private:
     bool hasLastColor_{};
 };
 
-}  // namespace als
+}  // namespace lightctrl

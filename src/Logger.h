@@ -4,7 +4,7 @@
 
 #include <fstream>
 
-namespace als {
+namespace lightctrl {
 
 class Logger final {
 public:
@@ -23,4 +23,4 @@ private:
     std::filesystem::path path_;
 };
 
-}  // namespace als
+}  // namespace lightctrl

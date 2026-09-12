@@ -18,9 +18,9 @@ if (-not $installationPath) {
 }
 
 $msbuild = Join-Path $installationPath 'MSBuild\Current\Bin\MSBuild.exe'
-& $msbuild (Join-Path $repoRoot 'IROKLightCtrl.sln') /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x64 /nologo
+& $msbuild (Join-Path $repoRoot 'LightController.sln') /m /t:Build "/p:Configuration=$Configuration" /p:Platform=x64 /nologo
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Built: $repoRoot\build\$Configuration\IROKLightCtrl.exe"
+Write-Host "Built: $repoRoot\build\$Configuration\LightController.exe"
