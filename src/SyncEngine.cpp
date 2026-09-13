@@ -24,6 +24,11 @@ RgbColor Scale(RgbColor color, float amount) {
     };
 }
 
+int ColorIntensity(RgbColor color) {
+    return static_cast<int>(color.r) + static_cast<int>(color.g) +
+           static_cast<int>(color.b);
+}
+
 RgbColor QuantizeReceiverColor(RgbColor color) {
     const auto channel = [](std::uint8_t value) {
         constexpr int step = 24;
@@ -242,6 +247,8 @@ void SyncEngine::ThreadMain() {
     bool hasReceiverOutput = false;
     RgbColor receiverOutput{};
     LightingMode previousReceiverMode = static_cast<LightingMode>(lightingMode_.load());
+    bool hasContinuousOutput = false;
+    RgbColor continuousOutput{};
     std::size_t lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
     while (!stop_.load()) {
         const auto now = std::chrono::steady_clock::now();
@@ -265,6 +272,7 @@ void SyncEngine::ThreadMain() {
             previousAudioLevel = 0.0F;
             receiverPulseArmed = true;
             hasReceiverOutput = false;
+            hasContinuousOutput = false;
             lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
         }
 
@@ -327,6 +335,26 @@ void SyncEngine::ThreadMain() {
                                       idleLevel * brightness / 100.0F);
                     }
                     break;
+            }
+
+            if (lightingMode == LightingMode::Audio) {
+                if (!hasContinuousOutput) {
+                    continuousOutput = color;
+                    hasContinuousOutput = true;
+                } else {
+                    const int currentIntensity = ColorIntensity(continuousOutput);
+                    const int targetIntensity = ColorIntensity(color);
+                    const float smoothing = targetIntensity > currentIntensity + 12
+                                                ? 0.20F
+                                                : (targetIntensity + 12 < currentIntensity
+                                                       ? 0.085F
+                                                       : 0.14F);
+                    continuousOutput = Blend(continuousOutput, color, smoothing);
+                }
+                color = continuousOutput;
+            } else {
+                continuousOutput = color;
+                hasContinuousOutput = true;
             }
             if (!paused_.load()) {
                 if (settings_.keyboardEnabled && keyboard.IsOpen() && !keyboard.SetColor(color)) {
