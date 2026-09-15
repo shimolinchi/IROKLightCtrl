@@ -77,7 +77,9 @@ private:
                         const std::wstring& name,
                         const std::wstring& detail,
                         bool ready,
-                        int icon);
+                        int icon,
+                        int targetId = 0,
+                        const std::wstring& action = L"");
 
     void FillRounded(HDC context,
                      const RECT& bounds,
@@ -118,6 +120,7 @@ private:
     void HandleClick(int id);
     void UpdateSlider(int id, int x);
     void PickColor(bool primary);
+    void OpenDeviceDriver(const wchar_t* url);
     void StartMouseTracking();
     void RefreshPalette();
     void ApplyWindowTheme();

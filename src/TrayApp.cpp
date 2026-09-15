@@ -56,6 +56,8 @@ enum TargetId : int {
     kThemeLight,
     kStartupToggle,
     kPause,
+    kOpenKeyboardDriver,
+    kOpenMouseDriver,
     kExit,
 };
 
@@ -64,6 +66,7 @@ enum UiIcon : int {
     kIconAudio,
     kIconDevices,
     kIconKeyboard,
+    kIconMouse,
     kIconChassis,
 };
 
@@ -1010,7 +1013,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
     const int left = workspace.left + Scale(26);
     const int right = workspace.right - Scale(26);
     const int cardWidth = (right - left - gap) / 2;
-    const int cardHeight = Scale(110);
+    const int cardHeight = Scale(124);
     const int rowOne = workspace.top + Scale(101);
     const int rowTwo = rowOne + cardHeight + gap;
 
@@ -1028,7 +1031,9 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                        : status.keyboardName +
                              (status.keyboardFirmware.empty() ? L"" : L"  固件 " + status.keyboardFirmware),
                    status.keyboardReady,
-                   kIconKeyboard);
+                   kIconKeyboard,
+                   kOpenKeyboardDriver,
+                   L"打开 IROK 网页驱动  >");
 
     const bool dynamicReady = status.dynamicLightingAvailable > 0;
     const std::wstring dynamicDetail =
@@ -1042,11 +1047,13 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                    kIconChassis);
     DrawDeviceCard(context,
                    {left + cardWidth + gap, rowTwo, right, rowTwo + cardHeight},
-                   L"AM INFINITY 8K 接收器",
+                   L"AM INFINITY 8K 鼠标",
                    status.angryMiaoReceiverName.empty() ? L"等待 USB HID 接收器"
                                                         : status.angryMiaoReceiverName,
                    status.angryMiaoReceiverReady,
-                   kIconChassis);
+                   kIconMouse,
+                   kOpenMouseDriver,
+                   L"打开 AM Master  >");
 
     const RECT note{left,
                     workspace.bottom - Scale(98),
@@ -1272,8 +1279,16 @@ void TrayApp::DrawDeviceCard(HDC context,
                              const std::wstring& name,
                              const std::wstring& detail,
                              bool ready,
-                             int icon) {
-    FillRounded(context, bounds, palette_.surface, Scale(8), palette_.border);
+                             int icon,
+                             int targetId,
+                             const std::wstring& action) {
+    const bool interactive = targetId != 0;
+    const bool hovered = interactive && hoveredTarget_ == targetId;
+    FillRounded(context,
+                bounds,
+                hovered ? palette_.surfaceHover : palette_.surface,
+                Scale(8),
+                hovered ? kBrand : palette_.border);
     const RECT iconTile{bounds.left + Scale(16),
                         bounds.top + Scale(17),
                         bounds.left + Scale(55),
@@ -1305,11 +1320,21 @@ void TrayApp::DrawDeviceCard(HDC context,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     DrawLabel(context,
               detail,
-              {bounds.left + Scale(16), bounds.top + Scale(76), bounds.right - Scale(16),
-               bounds.bottom - Scale(12)},
+              {bounds.left + Scale(16), bounds.top + Scale(70), bounds.right - Scale(16),
+               bounds.top + Scale(94)},
               smallFont_,
               palette_.hint,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    if (interactive) {
+        DrawLabel(context,
+                  action,
+                  {bounds.left + Scale(16), bounds.bottom - Scale(29), bounds.right - Scale(16),
+                   bounds.bottom - Scale(8)},
+                  smallFont_,
+                  hovered ? kBrand : palette_.accentSoftText,
+                  DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        AddHitTarget(targetId, bounds);
+    }
 }
 
 void TrayApp::FillRounded(HDC context,
@@ -1541,6 +1566,18 @@ void TrayApp::DrawIcon(HDC context, int icon, const RECT& bounds, COLORREF color
                 Rectangle(context, x, y, x + Scale(2), y + Scale(2));
             }
         }
+    } else if (icon == kIconMouse) {
+        RoundRect(context,
+                  left + width / 5,
+                  top,
+                  right - width / 5,
+                  bottom,
+                  Scale(9),
+                  Scale(9));
+        MoveToEx(context, left + width / 2, top, nullptr);
+        LineTo(context, left + width / 2, top + height * 2 / 5);
+        MoveToEx(context, left + width / 5, top + height * 2 / 5, nullptr);
+        LineTo(context, right - width / 5, top + height * 2 / 5);
     } else if (icon == kIconChassis) {
         RoundRect(context, left + width / 4, top, right - width / 4, bottom, Scale(3), Scale(3));
         Ellipse(context,
@@ -1678,6 +1715,12 @@ void TrayApp::HandleClick(int id) {
         case kPause:
             engine_.TogglePaused();
             break;
+        case kOpenKeyboardDriver:
+            OpenDeviceDriver(L"https://hid.irok.cn");
+            break;
+        case kOpenMouseDriver:
+            OpenDeviceDriver(L"https://ammaster.angrymiao.com/mouse");
+            break;
         case kExit:
             exiting_ = true;
             DestroyWindow(window_);
@@ -1687,6 +1730,21 @@ void TrayApp::HandleClick(int id) {
     }
     if (window_) {
         InvalidateRect(window_, nullptr, FALSE);
+    }
+}
+
+void TrayApp::OpenDeviceDriver(const wchar_t* url) {
+    const bool wasPaused = engine_.IsPaused();
+    engine_.SetPaused(true);
+    const auto result = reinterpret_cast<INT_PTR>(
+        ShellExecuteW(window_, L"open", url, nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) {
+        engine_.SetPaused(wasPaused);
+        Logger::Instance().Error(L"Could not open device driver");
+        MessageBoxW(window_,
+                    L"无法打开设备驱动网页。",
+                    L"LightController",
+                    MB_OK | MB_ICONERROR);
     }
 }
 

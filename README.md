@@ -52,6 +52,10 @@ silent, with continuously interpolated color and brightness transitions. The
 non-streaming receiver turns fully off after silence and updates only on distinct
 audio pulses, reducing effect-reload flicker during steady audio.
 
+On the Devices page, the IROK keyboard and AM Infinity mouse cards open their
+official WebHID control panels. LightController pauses its own lighting output
+first so the vendor driver can adjust settings without competing HID writes.
+
 Settings and logs are stored in `%LOCALAPPDATA%\LightController`. The interface
 theme defaults to dark and can be switched between dark and light on the Devices page.
 The keyboard and receiver lighting modes are restored when the app exits normally.
