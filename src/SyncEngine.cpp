@@ -152,6 +152,22 @@ void SyncEngine::RequestReconnect() {
     reconnect_.store(true);
 }
 
+bool SyncEngine::BeginReceiverControl() {
+    receiverControlRequested_.store(true);
+    for (int attempt = 0; attempt < 30; ++attempt) {
+        if (receiverControlReady_.load()) {
+            return true;
+        }
+        Sleep(20);
+    }
+    receiverControlRequested_.store(false);
+    return false;
+}
+
+void SyncEngine::EndReceiverControl() {
+    receiverControlRequested_.store(false);
+}
+
 EngineStatus SyncEngine::Status() const {
     std::lock_guard lock(statusMutex_);
     return status_;
@@ -252,6 +268,20 @@ void SyncEngine::ThreadMain() {
     std::size_t lastDynamicLightingAvailable = dynamicLighting.AvailableCount();
     while (!stop_.load()) {
         const auto now = std::chrono::steady_clock::now();
+        if (receiverControlRequested_.load()) {
+            if (!receiverControlReady_.load()) {
+                receiver.Close(false);
+                receiverControlReady_.store(true);
+                UpdateStatus([](EngineStatus& status) {
+                    status.angryMiaoReceiverReady = false;
+                });
+            }
+        } else if (receiverControlReady_.exchange(false)) {
+            initializeReceiver();
+            nextReceiverRetry = now + std::chrono::seconds(5);
+            nextReceiverFrame = now;
+            hasReceiverOutput = false;
+        }
         if (reconnect_.exchange(false)) {
             Logger::Instance().Info(L"Manual device reconnect requested");
             audio.Close();
@@ -284,7 +314,8 @@ void SyncEngine::ThreadMain() {
             initializeKeyboard();
             nextKeyboardRetry = now + std::chrono::seconds(5);
         }
-        if (settings_.angryMiaoReceiverEnabled && !receiver.IsOpen() &&
+        if (!receiverControlRequested_.load() && settings_.angryMiaoReceiverEnabled &&
+            !receiver.IsOpen() &&
             now >= nextReceiverRetry) {
             initializeReceiver();
             nextReceiverRetry = now + std::chrono::seconds(5);

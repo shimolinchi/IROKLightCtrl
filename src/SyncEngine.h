@@ -46,6 +46,8 @@ public:
     void SetEffectSpeed(int speed);
     void SetReverseDirection(bool reverse);
     void RequestReconnect();
+    bool BeginReceiverControl();
+    void EndReceiverControl();
 
     [[nodiscard]] bool IsPaused() const noexcept { return paused_.load(); }
     [[nodiscard]] Sensitivity GetSensitivity() const noexcept {
@@ -77,6 +79,8 @@ private:
     std::atomic<bool> stop_{};
     std::atomic<bool> paused_{};
     std::atomic<bool> reconnect_{};
+    std::atomic<bool> receiverControlRequested_{};
+    std::atomic<bool> receiverControlReady_{};
     std::atomic<int> sensitivity_{static_cast<int>(Sensitivity::Normal)};
     std::atomic<int> lightingMode_{static_cast<int>(LightingMode::Audio)};
     std::atomic<int> audioColorMode_{static_cast<int>(AudioColorMode::GradientCycle)};

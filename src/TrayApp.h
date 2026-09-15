@@ -70,6 +70,8 @@ private:
     void DrawLightingPage(HDC context, const RECT& workspace, const RECT& panel);
     void DrawAudioPage(HDC context, const RECT& workspace, const RECT& panel);
     void DrawDevicesPage(HDC context, const RECT& workspace, const RECT& panel);
+    void DrawKeyboardDriverPage(HDC context, const RECT& workspace, const RECT& panel);
+    void DrawMouseDriverPage(HDC context, const RECT& workspace, const RECT& panel);
     void DrawKeyboard(HDC context, const RECT& bounds);
     void DrawAudioVisualizer(HDC context, const RECT& bounds);
     void DrawDeviceCard(HDC context,
@@ -120,7 +122,9 @@ private:
     void HandleClick(int id);
     void UpdateSlider(int id, int x);
     void PickColor(bool primary);
-    void OpenDeviceDriver(const wchar_t* url);
+    void RefreshMouseSettings();
+    bool WithMouseController(const std::function<bool(AngryMiaoReceiver&)>& operation);
+    void SetMouseOperationResult(bool succeeded, const std::wstring& successMessage);
     void StartMouseTracking();
     void RefreshPalette();
     void ApplyWindowTheme();
@@ -146,8 +150,14 @@ private:
     int hoveredTarget_{};
     int activeSlider_{};
     int timerTicks_{};
+    int keyboardDriverTab_{};
+    int mouseDriverTab_{1};
+    int selectedMouseDpiStage_{};
     bool trackingMouse_{};
     bool exiting_{};
+    bool mouseSettingsReady_{};
+    AngryMiaoReceiver::MouseSettings mouseSettings_{};
+    std::wstring mouseStatusMessage_{L"正在等待读取鼠标参数"};
 
     HFONT brandFont_{};
     HFONT titleFont_{};

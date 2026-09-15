@@ -52,9 +52,14 @@ silent, with continuously interpolated color and brightness transitions. The
 non-streaming receiver turns fully off after silence and updates only on distinct
 audio pulses, reducing effect-reload flicker during steady audio.
 
-On the Devices page, the IROK keyboard and AM Infinity mouse cards open their
-official WebHID control panels. LightController pauses its own lighting output
-first so the vendor driver can adjust settings without competing HID writes.
+On the Devices page, the IROK keyboard and AM Infinity mouse cards open native
+configuration pages inside LightController. The keyboard page provides the
+shared lighting controls; unverified magnetic-switch and remapping commands are
+shown read-only. The mouse page reads and applies DPI, polling rate, debounce,
+lift-off distance, Motion Sync, angle snapping, ripple correction, FPS mode,
+and the DPI-button setting through the original `VID_3151/PID_5007` receiver
+protocol. LightController temporarily hands receiver ownership to the settings
+page so configuration and RGB writes cannot collide.
 
 Settings and logs are stored in `%LOCALAPPDATA%\LightController`. The interface
 theme defaults to dark and can be switched between dark and light on the Devices page.
@@ -85,6 +90,12 @@ Test only the AM INFINITY 8K receiver RGB and restore its previous effect:
 
 ```powershell
 .\build\Release\LightController.exe --receiver-self-test 4
+```
+
+Read the AM INFINITY mouse settings without changing them:
+
+```powershell
+.\build\Release\LightController.exe --mouse-settings-test mouse-settings.json
 ```
 
 ## License

@@ -58,6 +58,41 @@ enum TargetId : int {
     kPause,
     kOpenKeyboardDriver,
     kOpenMouseDriver,
+    kBackToDevices,
+
+    kKeyboardTabBase = 50,
+    kKeyboardTabTrigger,
+    kKeyboardTabActions,
+    kKeyboardTabLighting,
+
+    kMouseTabButtons = 60,
+    kMouseTabDpi,
+    kMouseTabParameters,
+    kMouseTabLighting,
+    kMouseRefresh,
+    kMouseDpiStage0 = 70,
+    kMouseDpiStage1,
+    kMouseDpiStage2,
+    kMouseDpiStage3,
+    kMouseDpiStage4,
+    kMouseDpiStage5,
+    kMouseDpiStage6,
+    kMouseDpiStage7,
+    kMouseDpiMinus,
+    kMouseDpiPlus,
+    kMouseRate125,
+    kMouseRate250,
+    kMouseRate500,
+    kMouseRate1000,
+    kMouseDebounceMinus,
+    kMouseDebouncePlus,
+    kMouseLodLow,
+    kMouseLodHigh,
+    kMouseMotionSync,
+    kMouseAngleSnap,
+    kMouseRippleCorrection,
+    kMouseFpsMode,
+    kMouseDpiButton,
     kExit,
 };
 
@@ -416,7 +451,12 @@ LRESULT TrayApp::HandleMessage(HWND window, UINT message, WPARAM wParam, LPARAM 
             break;
         case WM_KEYDOWN:
             if (wParam == VK_ESCAPE) {
-                ShowWindow(window, SW_HIDE);
+                if (selectedPage_ >= 3) {
+                    selectedPage_ = 2;
+                    InvalidateRect(window, nullptr, FALSE);
+                } else {
+                    ShowWindow(window, SW_HIDE);
+                }
                 return 0;
             }
             break;
@@ -533,8 +573,12 @@ void TrayApp::DrawInterface(HDC context, const RECT& client) {
         DrawLightingPage(context, workspace, panel);
     } else if (selectedPage_ == 1) {
         DrawAudioPage(context, workspace, panel);
-    } else {
+    } else if (selectedPage_ == 2) {
         DrawDevicesPage(context, workspace, panel);
+    } else if (selectedPage_ == 3) {
+        DrawKeyboardDriverPage(context, workspace, panel);
+    } else {
+        DrawMouseDriverPage(context, workspace, panel);
     }
 }
 
@@ -589,7 +633,7 @@ void TrayApp::DrawNavigation(HDC context, const RECT& bounds) {
                               top,
                               bounds.right - Scale(10),
                               top + Scale(74)};
-        const bool selected = selectedPage_ == index;
+        const bool selected = index == 2 ? selectedPage_ >= 2 : selectedPage_ == index;
         const bool hovered = hoveredTarget_ == item.id;
         if (selected || hovered) {
             FillRounded(context,
@@ -1033,7 +1077,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                    status.keyboardReady,
                    kIconKeyboard,
                    kOpenKeyboardDriver,
-                   L"打开 IROK 网页驱动  >");
+                   L"进入键盘配置  >");
 
     const bool dynamicReady = status.dynamicLightingAvailable > 0;
     const std::wstring dynamicDetail =
@@ -1053,7 +1097,7 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                    status.angryMiaoReceiverReady,
                    kIconMouse,
                    kOpenMouseDriver,
-                   L"打开 AM Master  >");
+                   L"进入鼠标配置  >");
 
     const RECT note{left,
                     workspace.bottom - Scale(98),
@@ -1145,6 +1189,351 @@ void TrayApp::DrawDevicesPage(HDC context, const RECT& workspace, const RECT& pa
                kExit,
                {panelLeft, panel.bottom - Scale(56), panelRight, panel.bottom - Scale(18)},
                L"退出 LightController");
+}
+
+void TrayApp::DrawKeyboardDriverPage(HDC context, const RECT& workspace, const RECT& panel) {
+    FillRounded(context, workspace, palette_.workspace, Scale(8));
+    FillRounded(context, panel, palette_.panel, Scale(8));
+
+    const int left = workspace.left + Scale(24);
+    const int right = workspace.right - Scale(24);
+    DrawButton(context,
+               kBackToDevices,
+               {left, workspace.top + Scale(17), left + Scale(78), workspace.top + Scale(51)},
+               L"< 返回");
+    DrawLabel(context,
+              L"IROK MG75 PRO",
+              {left + Scale(94), workspace.top + Scale(14), right, workspace.top + Scale(54)},
+              titleFont_,
+              palette_.text,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    constexpr const wchar_t* labels[] = {L"基础设置", L"触发设置", L"动作设置", L"灯效设置"};
+    constexpr int ids[] = {kKeyboardTabBase, kKeyboardTabTrigger, kKeyboardTabActions,
+                           kKeyboardTabLighting};
+    const int tabsTop = workspace.top + Scale(68);
+    const int tabGap = Scale(7);
+    const int tabWidth = (right - left - tabGap * 3) / 4;
+    for (int index = 0; index < 4; ++index) {
+        const int tabLeft = left + index * (tabWidth + tabGap);
+        DrawButton(context,
+                   ids[index],
+                   {tabLeft, tabsTop, tabLeft + tabWidth, tabsTop + Scale(36)},
+                   labels[index],
+                   keyboardDriverTab_ == index);
+    }
+
+    const int contentTop = tabsTop + Scale(53);
+    if (keyboardDriverTab_ == 3) {
+        DrawLabel(context,
+                  L"灯光模式",
+                  {left, contentTop, right, contentTop + Scale(27)},
+                  headingFont_,
+                  palette_.text);
+        const int gap = Scale(9);
+        const int half = (right - left - gap) / 2;
+        int y = contentTop + Scale(34);
+        DrawButton(context, kModeAudio, {left, y, left + half, y + Scale(37)}, L"音乐律动",
+                   engine_.GetLightingMode() == LightingMode::Audio);
+        DrawButton(context, kModeStatic, {left + half + gap, y, right, y + Scale(37)}, L"常亮",
+                   engine_.GetLightingMode() == LightingMode::Static);
+        y += Scale(46);
+        DrawButton(context, kModeBreathing, {left, y, left + half, y + Scale(37)}, L"呼吸",
+                   engine_.GetLightingMode() == LightingMode::Breathing);
+        DrawButton(context, kModeCycle, {left + half + gap, y, right, y + Scale(37)}, L"色域循环",
+                   engine_.GetLightingMode() == LightingMode::ColorCycle);
+        y += Scale(57);
+        DrawLabel(context, L"色域", {left, y, right, y + Scale(24)}, headingFont_, palette_.text);
+        y += Scale(28);
+        DrawColorSwatch(context, kPrimaryColor, {left, y, left + half, y + Scale(39)},
+                        engine_.GetPrimaryColor());
+        DrawColorSwatch(context, kSecondaryColor,
+                        {left + half + gap, y, right, y + Scale(39)},
+                        engine_.GetSecondaryColor());
+        y += Scale(57);
+        DrawLabel(context,
+                  L"亮度  " + std::to_wstring(engine_.GetMaxBrightness()) + L"%",
+                  {left, y, right, y + Scale(24)},
+                  bodyFont_, palette_.text);
+        DrawSlider(context, kBrightnessSlider, {left, y + Scale(27), right, y + Scale(45)},
+                   engine_.GetMaxBrightness(), 10, 100);
+        y += Scale(66);
+        DrawLabel(context,
+                  L"速度  " + std::to_wstring(engine_.GetEffectSpeed()),
+                  {left, y, right, y + Scale(24)},
+                  bodyFont_, palette_.text);
+        DrawSlider(context, kSpeedSlider, {left, y + Scale(27), right, y + Scale(45)},
+                   engine_.GetEffectSpeed(), 1, 100);
+    } else if (keyboardDriverTab_ == 1) {
+        DrawLabel(context, L"磁轴触发", {left, contentTop, right, contentTop + Scale(30)},
+                  titleFont_, palette_.text);
+        int y = contentTop + Scale(45);
+        for (const auto* label : {L"触发行程", L"快速触发 RT", L"顶部死区", L"底部死区"}) {
+            const RECT row{left, y, right, y + Scale(66)};
+            FillRounded(context, row, palette_.surface, Scale(7), palette_.border);
+            DrawLabel(context, label,
+                      {row.left + Scale(15), row.top + Scale(8), row.right - Scale(15),
+                       row.top + Scale(32)},
+                      bodyFont_, palette_.disabledText);
+            DrawSlider(context, 0, {row.left + Scale(15), row.top + Scale(38),
+                                    row.right - Scale(15), row.top + Scale(54)},
+                       50, 0, 100, false);
+            y += Scale(75);
+        }
+    } else {
+        DrawLabel(context,
+                  keyboardDriverTab_ == 0 ? L"键盘配置" : L"按键与宏",
+                  {left, contentTop, right, contentTop + Scale(30)},
+                  titleFont_, palette_.text);
+        const RECT keyboard{left, contentTop + Scale(48), right,
+                            std::min<int>(workspace.bottom - Scale(30), contentTop + Scale(330))};
+        DrawKeyboard(context, keyboard);
+        if (keyboardDriverTab_ == 2) {
+            DrawButton(context, 0,
+                       {left, keyboard.bottom + Scale(18), left + Scale(150),
+                        keyboard.bottom + Scale(55)},
+                       L"选择按键", false, false);
+            DrawButton(context, 0,
+                       {left + Scale(160), keyboard.bottom + Scale(18), left + Scale(310),
+                        keyboard.bottom + Scale(55)},
+                       L"宏管理", false, false);
+        }
+    }
+
+    const EngineStatus status = engine_.Status();
+    const int panelLeft = panel.left + Scale(21);
+    const int panelRight = panel.right - Scale(21);
+    DrawLabel(context, L"设备信息",
+              {panelLeft, panel.top + Scale(17), panelRight, panel.top + Scale(51)},
+              titleFont_, palette_.text);
+    const RECT state{panelLeft, panel.top + Scale(68), panelRight, panel.top + Scale(135)};
+    FillRounded(context, state, palette_.surface, Scale(7), palette_.border);
+    DrawStatusDot(context, {state.left + Scale(16), state.top + Scale(20)}, status.keyboardReady);
+    DrawLabel(context, status.keyboardReady ? L"键盘已连接" : L"正在等待键盘",
+              {state.left + Scale(29), state.top + Scale(7), state.right - Scale(10),
+               state.top + Scale(34)},
+              headingFont_, palette_.text,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    DrawLabel(context,
+              L"固件  " + (status.keyboardFirmware.empty() ? std::wstring(L"-")
+                                                           : status.keyboardFirmware),
+              {state.left + Scale(15), state.top + Scale(36), state.right - Scale(10), state.bottom},
+              smallFont_, palette_.hint);
+    DrawLabel(context, L"配置槽", {panelLeft, panel.top + Scale(158), panelRight,
+                                    panel.top + Scale(184)}, headingFont_, palette_.text);
+    int x = panelLeft;
+    for (int index = 0; index < 3; ++index) {
+        DrawButton(context, 0,
+                   {x, panel.top + Scale(193), x + Scale(72), panel.top + Scale(229)},
+                   L"配置 " + std::to_wstring(index + 1), index == 0, false);
+        x += Scale(80);
+    }
+    const RECT note{panelLeft, panel.bottom - Scale(125), panelRight, panel.bottom - Scale(20)};
+    FillRounded(context, note, palette_.note, Scale(7));
+    DrawLabel(context,
+              keyboardDriverTab_ == 3
+                  ? L"灯效设置由 LightController 直接写入键盘，并与机箱和音频同步。"
+                  : L"磁轴、改键和宏协议尚未完成设备验证，因此暂时只读，避免写入错误参数。",
+              {note.left + Scale(14), note.top + Scale(10), note.right - Scale(14),
+               note.bottom - Scale(10)},
+              smallFont_, palette_.noteText, DT_LEFT | DT_VCENTER | DT_WORDBREAK);
+}
+
+void TrayApp::DrawMouseDriverPage(HDC context, const RECT& workspace, const RECT& panel) {
+    FillRounded(context, workspace, palette_.workspace, Scale(8));
+    FillRounded(context, panel, palette_.panel, Scale(8));
+    const int left = workspace.left + Scale(24);
+    const int right = workspace.right - Scale(24);
+    DrawButton(context, kBackToDevices,
+               {left, workspace.top + Scale(17), left + Scale(78), workspace.top + Scale(51)},
+               L"< 返回");
+    DrawLabel(context, L"AM INFINITY 8K",
+              {left + Scale(94), workspace.top + Scale(14), right, workspace.top + Scale(54)},
+              titleFont_, palette_.text,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    constexpr const wchar_t* labels[] = {L"按键", L"DPI", L"参数", L"灯效"};
+    constexpr int ids[] = {kMouseTabButtons, kMouseTabDpi, kMouseTabParameters,
+                           kMouseTabLighting};
+    const int tabsTop = workspace.top + Scale(68);
+    const int tabGap = Scale(7);
+    const int tabWidth = (right - left - tabGap * 3) / 4;
+    for (int index = 0; index < 4; ++index) {
+        const int tabLeft = left + index * (tabWidth + tabGap);
+        DrawButton(context, ids[index],
+                   {tabLeft, tabsTop, tabLeft + tabWidth, tabsTop + Scale(36)}, labels[index],
+                   mouseDriverTab_ == index);
+    }
+    const int contentTop = tabsTop + Scale(53);
+
+    if (mouseDriverTab_ == 0) {
+        const RECT mouseIcon{left + Scale(28), contentTop + Scale(45), left + Scale(188),
+                             contentTop + Scale(265)};
+        DrawIcon(context, kIconMouse, mouseIcon, palette_.hint);
+        int y = contentTop + Scale(20);
+        const int rowLeft = left + Scale(230);
+        for (const auto* label : {L"左键", L"右键", L"滚轮", L"侧键 1", L"侧键 2"}) {
+            const RECT row{rowLeft, y, right, y + Scale(48)};
+            FillRounded(context, row, palette_.surface, Scale(7), palette_.border);
+            DrawLabel(context, label,
+                      {row.left + Scale(14), row.top, row.left + Scale(95), row.bottom},
+                      bodyFont_, palette_.text);
+            DrawLabel(context, L"默认",
+                      {row.left + Scale(105), row.top, row.right - Scale(14), row.bottom},
+                      smallFont_, palette_.disabledText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            y += Scale(57);
+        }
+    } else if (mouseDriverTab_ == 1) {
+        DrawLabel(context, L"DPI 档位", {left, contentTop, right, contentTop + Scale(28)},
+                  headingFont_, palette_.text);
+        const int gap = Scale(8);
+        const int stageWidth = (right - left - gap * 3) / 4;
+        int y = contentTop + Scale(36);
+        for (int index = 0; index < 8; ++index) {
+            const int column = index % 4;
+            const int row = index / 4;
+            const int stageLeft = left + column * (stageWidth + gap);
+            const int value = mouseSettings_.dpiX[index] > 0 ? mouseSettings_.dpiX[index] : 800;
+            DrawButton(context, kMouseDpiStage0 + index,
+                       {stageLeft, y + row * Scale(46), stageLeft + stageWidth,
+                        y + row * Scale(46) + Scale(37)},
+                       std::to_wstring(value), selectedMouseDpiStage_ == index,
+                       mouseSettingsReady_);
+        }
+        y += Scale(109);
+        const RECT editor{left, y, right, y + Scale(130)};
+        FillRounded(context, editor, palette_.surface, Scale(7), palette_.border);
+        DrawLabel(context, L"当前档位 " + std::to_wstring(selectedMouseDpiStage_ + 1),
+                  {editor.left + Scale(18), editor.top + Scale(10), editor.right - Scale(18),
+                   editor.top + Scale(37)}, bodyFont_, palette_.hint);
+        const int dpi = mouseSettings_.dpiX[selectedMouseDpiStage_] > 0
+                            ? mouseSettings_.dpiX[selectedMouseDpiStage_]
+                            : 800;
+        DrawLabel(context, std::to_wstring(dpi) + L" DPI",
+                  {editor.left + Scale(95), editor.top + Scale(39), editor.right - Scale(95),
+                   editor.bottom - Scale(17)}, titleFont_, palette_.text,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DrawButton(context, kMouseDpiMinus,
+                   {editor.left + Scale(18), editor.top + Scale(50), editor.left + Scale(65),
+                    editor.top + Scale(96)}, L"-", false, mouseSettingsReady_);
+        DrawButton(context, kMouseDpiPlus,
+                   {editor.right - Scale(65), editor.top + Scale(50), editor.right - Scale(18),
+                    editor.top + Scale(96)}, L"+", false, mouseSettingsReady_);
+        DrawLabel(context, L"每次调整 100 DPI，范围 100 - 26000",
+                  {left, editor.bottom + Scale(10), right, editor.bottom + Scale(37)},
+                  smallFont_, palette_.hint, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    } else if (mouseDriverTab_ == 2) {
+        int y = contentTop;
+        DrawLabel(context, L"USB 回报率", {left, y, right, y + Scale(25)}, headingFont_, palette_.text);
+        y += Scale(31);
+        const int gap = Scale(7);
+        const int width = (right - left - gap * 3) / 4;
+        constexpr int rates[] = {125, 250, 500, 1000};
+        constexpr int rateIds[] = {kMouseRate125, kMouseRate250, kMouseRate500, kMouseRate1000};
+        for (int index = 0; index < 4; ++index) {
+            const int x = left + index * (width + gap);
+            DrawButton(context, rateIds[index], {x, y, x + width, y + Scale(36)},
+                       std::to_wstring(rates[index]) + L" Hz",
+                       mouseSettings_.reportRate == rates[index], mouseSettingsReady_);
+        }
+        y += Scale(52);
+        const auto drawToggleRow = [&](const std::wstring& label, int id, bool value) {
+            const RECT row{left, y, right, y + Scale(42)};
+            DrawLabel(context, label, {row.left, row.top, row.right - Scale(60), row.bottom},
+                      bodyFont_, mouseSettingsReady_ ? palette_.text : palette_.disabledText);
+            if (mouseSettingsReady_) {
+                DrawToggle(context, id, {row.right - Scale(45), row.top + Scale(9), row.right,
+                                         row.top + Scale(33)}, value);
+            }
+            y += Scale(45);
+        };
+        DrawLabel(context, L"按键去抖", {left, y, right - Scale(155), y + Scale(40)}, bodyFont_,
+                  mouseSettingsReady_ ? palette_.text : palette_.disabledText);
+        DrawButton(context, kMouseDebounceMinus,
+                   {right - Scale(148), y + Scale(3), right - Scale(108), y + Scale(39)}, L"-",
+                   false, mouseSettingsReady_);
+        DrawLabel(context, std::to_wstring(mouseSettings_.usbDebounce) + L" ms",
+                  {right - Scale(104), y, right - Scale(44), y + Scale(42)}, bodyFont_, palette_.text,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DrawButton(context, kMouseDebouncePlus,
+                   {right - Scale(40), y + Scale(3), right, y + Scale(39)}, L"+", false,
+                   mouseSettingsReady_);
+        y += Scale(49);
+        DrawLabel(context, L"抬起高度 LOD", {left, y, right - Scale(165), y + Scale(38)},
+                  bodyFont_, mouseSettingsReady_ ? palette_.text : palette_.disabledText);
+        DrawButton(context, kMouseLodLow,
+                   {right - Scale(158), y + Scale(2), right - Scale(81), y + Scale(38)}, L"低",
+                   mouseSettings_.liftOffDistance == 1, mouseSettingsReady_);
+        DrawButton(context, kMouseLodHigh,
+                   {right - Scale(75), y + Scale(2), right, y + Scale(38)}, L"高",
+                   mouseSettings_.liftOffDistance == 2, mouseSettingsReady_);
+        y += Scale(46);
+        drawToggleRow(L"Motion Sync", kMouseMotionSync, mouseSettings_.motionSync);
+        drawToggleRow(L"直线修正", kMouseAngleSnap, mouseSettings_.angleSnap);
+        drawToggleRow(L"波纹修正", kMouseRippleCorrection, mouseSettings_.rippleCorrection);
+        drawToggleRow(L"FPS 模式", kMouseFpsMode, mouseSettings_.fpsMode);
+        drawToggleRow(L"DPI 切换键", kMouseDpiButton, mouseSettings_.dpiButton);
+    } else {
+        DrawLabel(context, L"接收器灯效", {left, contentTop, right, contentTop + Scale(29)},
+                  titleFont_, palette_.text);
+        int y = contentTop + Scale(43);
+        DrawLabel(context, L"灯效类型", {left, y, right, y + Scale(24)}, headingFont_, palette_.text);
+        y += Scale(30);
+        const int gap = Scale(8);
+        const int half = (right - left - gap) / 2;
+        DrawButton(context, kModeAudio, {left, y, left + half, y + Scale(37)}, L"音乐律动",
+                   engine_.GetLightingMode() == LightingMode::Audio);
+        DrawButton(context, kModeStatic, {left + half + gap, y, right, y + Scale(37)}, L"常亮",
+                   engine_.GetLightingMode() == LightingMode::Static);
+        y += Scale(47);
+        DrawButton(context, kModeBreathing, {left, y, left + half, y + Scale(37)}, L"呼吸",
+                   engine_.GetLightingMode() == LightingMode::Breathing);
+        DrawButton(context, kModeCycle, {left + half + gap, y, right, y + Scale(37)}, L"色域循环",
+                   engine_.GetLightingMode() == LightingMode::ColorCycle);
+        y += Scale(55);
+        DrawLabel(context, L"同步色域", {left, y, right, y + Scale(24)}, headingFont_, palette_.text);
+        y += Scale(29);
+        DrawColorSwatch(context, kPrimaryColor, {left, y, left + half, y + Scale(40)},
+                        engine_.GetPrimaryColor());
+        DrawColorSwatch(context, kSecondaryColor,
+                        {left + half + gap, y, right, y + Scale(40)},
+                        engine_.GetSecondaryColor());
+    }
+
+    const EngineStatus engineStatus = engine_.Status();
+    const int panelLeft = panel.left + Scale(21);
+    const int panelRight = panel.right - Scale(21);
+    DrawLabel(context, L"鼠标状态",
+              {panelLeft, panel.top + Scale(17), panelRight, panel.top + Scale(51)},
+              titleFont_, palette_.text);
+    const RECT state{panelLeft, panel.top + Scale(68), panelRight, panel.top + Scale(151)};
+    FillRounded(context, state, palette_.surface, Scale(7), palette_.border);
+    DrawStatusDot(context, {state.left + Scale(16), state.top + Scale(21)}, mouseSettingsReady_);
+    DrawLabel(context, mouseSettingsReady_ ? L"鼠标参数已连接" : L"无法读取鼠标参数",
+              {state.left + Scale(29), state.top + Scale(7), state.right - Scale(10),
+               state.top + Scale(35)}, headingFont_, palette_.text,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    DrawLabel(context,
+              mouseSettings_.mouseBattery >= 0
+                  ? L"电量  " + std::to_wstring(mouseSettings_.mouseBattery) + L"%"
+                  : L"通过 2.4 GHz 接收器连接",
+              {state.left + Scale(15), state.top + Scale(42), state.right - Scale(10), state.bottom},
+              smallFont_, palette_.hint);
+    DrawButton(context, kMouseRefresh,
+               {panelLeft, panel.top + Scale(166), panelRight, panel.top + Scale(204)},
+               L"重新读取鼠标参数", false, engineStatus.angryMiaoReceiverReady);
+    DrawLabel(context, L"设备协议",
+              {panelLeft, panel.top + Scale(229), panelRight, panel.top + Scale(254)},
+              headingFont_, palette_.text);
+    DrawLabel(context, L"VID 3151  ·  PID 5007\n用户态 HID，无需安装内核驱动",
+              {panelLeft, panel.top + Scale(261), panelRight, panel.top + Scale(312)},
+              smallFont_, palette_.hint, DT_LEFT | DT_TOP | DT_WORDBREAK);
+    const RECT message{panelLeft, panel.bottom - Scale(128), panelRight, panel.bottom - Scale(20)};
+    FillRounded(context, message, palette_.note, Scale(7));
+    DrawLabel(context, mouseStatusMessage_,
+              {message.left + Scale(14), message.top + Scale(10), message.right - Scale(14),
+               message.bottom - Scale(10)},
+              smallFont_, palette_.noteText, DT_LEFT | DT_VCENTER | DT_WORDBREAK);
 }
 
 void TrayApp::DrawKeyboard(HDC context, const RECT& bounds) {
@@ -1628,6 +2017,9 @@ void TrayApp::HandleClick(int id) {
         case kNavDevices:
             selectedPage_ = 2;
             break;
+        case kBackToDevices:
+            selectedPage_ = 2;
+            break;
         case kModeAudio:
             settings_.lightingMode = LightingMode::Audio;
             engine_.SetLightingMode(settings_.lightingMode);
@@ -1716,11 +2108,116 @@ void TrayApp::HandleClick(int id) {
             engine_.TogglePaused();
             break;
         case kOpenKeyboardDriver:
-            OpenDeviceDriver(L"https://hid.irok.cn");
+            selectedPage_ = 3;
             break;
         case kOpenMouseDriver:
-            OpenDeviceDriver(L"https://ammaster.angrymiao.com/mouse");
+            selectedPage_ = 4;
+            mouseDriverTab_ = 1;
+            RefreshMouseSettings();
             break;
+        case kKeyboardTabBase:
+        case kKeyboardTabTrigger:
+        case kKeyboardTabActions:
+        case kKeyboardTabLighting:
+            keyboardDriverTab_ = id - kKeyboardTabBase;
+            break;
+        case kMouseTabButtons:
+        case kMouseTabDpi:
+        case kMouseTabParameters:
+        case kMouseTabLighting:
+            mouseDriverTab_ = id - kMouseTabButtons;
+            break;
+        case kMouseRefresh:
+            RefreshMouseSettings();
+            break;
+        case kMouseDpiStage0:
+        case kMouseDpiStage1:
+        case kMouseDpiStage2:
+        case kMouseDpiStage3:
+        case kMouseDpiStage4:
+        case kMouseDpiStage5:
+        case kMouseDpiStage6:
+        case kMouseDpiStage7:
+            selectedMouseDpiStage_ = id - kMouseDpiStage0;
+            break;
+        case kMouseDpiMinus:
+        case kMouseDpiPlus: {
+            const int direction = id == kMouseDpiPlus ? 1 : -1;
+            const int current = mouseSettings_.dpiX[selectedMouseDpiStage_];
+            const int value = std::clamp(current + direction * 100, 100, 26000);
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseDpi(mouseSettings_, selectedMouseDpiStage_, value);
+            });
+            SetMouseOperationResult(succeeded, L"DPI 已写入鼠标");
+            break;
+        }
+        case kMouseRate125:
+        case kMouseRate250:
+        case kMouseRate500:
+        case kMouseRate1000: {
+            constexpr int rates[] = {125, 250, 500, 1000};
+            const int rate = rates[id - kMouseRate125];
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseReportRate(mouseSettings_, rate);
+            });
+            SetMouseOperationResult(succeeded, L"USB 回报率已写入鼠标");
+            break;
+        }
+        case kMouseDebounceMinus:
+        case kMouseDebouncePlus: {
+            const int direction = id == kMouseDebouncePlus ? 1 : -1;
+            const int value = std::clamp(mouseSettings_.usbDebounce + direction, 0, 20);
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseUsbDebounce(mouseSettings_, value);
+            });
+            SetMouseOperationResult(succeeded, L"按键去抖已写入鼠标");
+            break;
+        }
+        case kMouseLodLow:
+        case kMouseLodHigh: {
+            const int value = id == kMouseLodLow ? 1 : 2;
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseLiftOffDistance(mouseSettings_, value);
+            });
+            SetMouseOperationResult(succeeded, L"LOD 已写入鼠标");
+            break;
+        }
+        case kMouseMotionSync: {
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseMotionSync(mouseSettings_, !mouseSettings_.motionSync);
+            });
+            SetMouseOperationResult(succeeded, L"Motion Sync 已写入鼠标");
+            break;
+        }
+        case kMouseAngleSnap: {
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseAngleSnap(mouseSettings_, !mouseSettings_.angleSnap);
+            });
+            SetMouseOperationResult(succeeded, L"直线修正已写入鼠标");
+            break;
+        }
+        case kMouseRippleCorrection: {
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseRippleCorrection(mouseSettings_,
+                                                       !mouseSettings_.rippleCorrection);
+            });
+            SetMouseOperationResult(succeeded, L"波纹修正已写入鼠标");
+            break;
+        }
+        case kMouseFpsMode: {
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseFpsMode(mouseSettings_, !mouseSettings_.fpsMode);
+            });
+            SetMouseOperationResult(succeeded, L"FPS 模式已写入鼠标");
+            break;
+        }
+        case kMouseDpiButton: {
+            const bool succeeded = WithMouseController([&](AngryMiaoReceiver& device) {
+                return device.SetMouseDpiButton(mouseSettings_, !mouseSettings_.dpiButton);
+            });
+            SetMouseOperationResult(succeeded, L"DPI 切换键设置已写入鼠标");
+            break;
+        }
         case kExit:
             exiting_ = true;
             DestroyWindow(window_);
@@ -1733,18 +2230,47 @@ void TrayApp::HandleClick(int id) {
     }
 }
 
-void TrayApp::OpenDeviceDriver(const wchar_t* url) {
+bool TrayApp::WithMouseController(
+    const std::function<bool(AngryMiaoReceiver&)>& operation) {
     const bool wasPaused = engine_.IsPaused();
     engine_.SetPaused(true);
-    const auto result = reinterpret_cast<INT_PTR>(
-        ShellExecuteW(window_, L"open", url, nullptr, nullptr, SW_SHOWNORMAL));
-    if (result <= 32) {
+    if (!engine_.BeginReceiverControl()) {
         engine_.SetPaused(wasPaused);
-        Logger::Instance().Error(L"Could not open device driver");
-        MessageBoxW(window_,
-                    L"无法打开设备驱动网页。",
-                    L"LightController",
-                    MB_OK | MB_ICONERROR);
+        mouseStatusMessage_ = L"灯光引擎未能及时释放鼠标接收器，请重试。";
+        return false;
+    }
+    Sleep(100);
+    AngryMiaoReceiver device;
+    bool succeeded = device.Open(false);
+    if (succeeded) {
+        succeeded = operation(device);
+    }
+    if (!succeeded) {
+        mouseStatusMessage_ = device.LastError().empty() ? L"鼠标参数操作失败，请重新连接后再试。"
+                                                         : device.LastError();
+        Logger::Instance().Error(L"AM mouse control failed: " + mouseStatusMessage_);
+    }
+    device.Close(false);
+    engine_.EndReceiverControl();
+    engine_.SetPaused(wasPaused);
+    return succeeded;
+}
+
+void TrayApp::RefreshMouseSettings() {
+    mouseStatusMessage_ = L"正在通过 2.4 GHz 接收器读取鼠标参数...";
+    mouseSettingsReady_ = WithMouseController([&](AngryMiaoReceiver& device) {
+        return device.ReadMouseSettings(mouseSettings_);
+    });
+    if (mouseSettingsReady_) {
+        selectedMouseDpiStage_ = mouseSettings_.currentDpi;
+        mouseStatusMessage_ = L"已读取真实鼠标参数。这里的 DPI 和传感器设置会直接写入设备。";
+    }
+}
+
+void TrayApp::SetMouseOperationResult(bool succeeded, const std::wstring& successMessage) {
+    if (succeeded) {
+        mouseSettingsReady_ = true;
+        mouseStatusMessage_ = successMessage;
     }
 }
 

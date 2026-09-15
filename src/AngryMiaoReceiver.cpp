@@ -155,6 +155,303 @@ bool AngryMiaoReceiver::QueryFeature(
     return true;
 }
 
+bool AngryMiaoReceiver::WaitRemoteStatus(
+    bool waitForRead, std::array<std::uint8_t, kPayloadLength>* response) {
+    for (int attempt = 0; attempt < 12; ++attempt) {
+        std::array<std::uint8_t, kPayloadLength> request{};
+        request[0] = 0xf7;
+        std::array<std::uint8_t, kPayloadLength> status{};
+        if (!QueryFeature(request, status)) {
+            return false;
+        }
+        const bool ready = waitForRead ? status[0] == 1 : status[5] == 1;
+        if (ready) {
+            if (response) {
+                *response = status;
+            }
+            return true;
+        }
+        Sleep(40);
+    }
+    SetError(waitForRead ? L"Mouse response timed out" : L"Mouse receiver stayed busy");
+    return false;
+}
+
+bool AngryMiaoReceiver::RemoteRead(
+    const std::array<std::uint8_t, kPayloadLength>& command,
+    std::array<std::uint8_t, kPayloadLength>& response) {
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0xf6;
+    request[1] = 5;
+    if (!SendFeature(request) || !WaitRemoteStatus(false)) {
+        return false;
+    }
+
+    request = {};
+    request[0] = 0xfe;
+    request[1] = static_cast<std::uint8_t>(kPayloadLength);
+    std::array<std::uint8_t, kPayloadLength> ignored{};
+    if (!QueryFeature(request, ignored) || !QueryFeature(command, ignored) ||
+        !WaitRemoteStatus(true)) {
+        return false;
+    }
+
+    request = {};
+    request[0] = 0xfc;
+    return QueryFeature(request, response);
+}
+
+bool AngryMiaoReceiver::RemoteWrite(
+    const std::array<std::uint8_t, kPayloadLength>& command) {
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0xf6;
+    request[1] = 5;
+    if (!SendFeature(request) || !WaitRemoteStatus(false)) {
+        return false;
+    }
+
+    request = {};
+    request[0] = 0xfe;
+    request[1] = static_cast<std::uint8_t>(kPayloadLength);
+    std::array<std::uint8_t, kPayloadLength> ignored{};
+    if (!QueryFeature(request, ignored) || !SendFeature(command)) {
+        return false;
+    }
+    return WaitRemoteStatus(false);
+}
+
+bool AngryMiaoReceiver::ReadMouseInfo(
+    std::array<std::uint8_t, kPayloadLength>& response) {
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0xd3;
+    AddChecksum(request, 7);
+    return RemoteRead(request, response) && response[0] == 0xd3;
+}
+
+bool AngryMiaoReceiver::WriteMouseInfo(
+    const std::array<std::uint8_t, kPayloadLength>& response) {
+    auto request = response;
+    std::fill_n(request.begin(), 8, static_cast<std::uint8_t>(0));
+    request[0] = 0x53;
+    AddChecksum(request, 7);
+    return RemoteWrite(request);
+}
+
+bool AngryMiaoReceiver::ReadMouseSettings(MouseSettings& settings) {
+    if (!IsOpen()) {
+        return false;
+    }
+
+    std::array<std::uint8_t, kPayloadLength> dpiRequest{};
+    dpiRequest[0] = 0xd4;
+    AddChecksum(dpiRequest, 7);
+    std::array<std::uint8_t, kPayloadLength> dpi{};
+    if (!RemoteRead(dpiRequest, dpi) || dpi[0] != 0xd4) {
+        SetError(L"Could not read AM mouse DPI settings");
+        return false;
+    }
+
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        SetError(L"Could not read AM mouse sensor settings");
+        return false;
+    }
+
+    settings.currentDpi = std::clamp(static_cast<int>(dpi[2]), 0, 7);
+    settings.dpiStages = std::clamp(static_cast<int>(dpi[3]), 1, 8);
+    for (int index = 0; index < 8; ++index) {
+        const int xOffset = 8 + index * 2;
+        const int yOffset = 24 + index * 2;
+        settings.dpiX[index] = dpi[xOffset] | (dpi[xOffset + 1] << 8);
+        settings.dpiY[index] = dpi[yOffset] | (dpi[yOffset + 1] << 8);
+        const int colorOffset = 40 + index * 3;
+        settings.dpiColors[index] = {dpi[colorOffset], dpi[colorOffset + 1],
+                                     dpi[colorOffset + 2]};
+    }
+
+    switch (info[9]) {
+        case 8:
+            settings.reportRate = 125;
+            break;
+        case 4:
+            settings.reportRate = 250;
+            break;
+        case 2:
+            settings.reportRate = 500;
+            break;
+        default:
+            settings.reportRate = 1000;
+            break;
+    }
+    settings.usbDebounce = info[10];
+    settings.rippleCorrection = info[12] != 0;
+    settings.liftOffDistance = info[52];
+    settings.angleSnap = info[53] != 0;
+    settings.wirelessDebounce = info[61];
+    settings.bluetoothDebounce = info[62];
+    settings.motionSync = info[63] == 0;
+
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0xe2;
+    AddChecksum(request, 7);
+    std::array<std::uint8_t, kPayloadLength> mode{};
+    if (RemoteRead(request, mode)) {
+        settings.fpsMode = mode[1] != 0;
+    }
+    request = {};
+    request[0] = 0xe3;
+    AddChecksum(request, 7);
+    if (RemoteRead(request, mode)) {
+        settings.dpiButton = mode[1] != 0;
+    }
+
+    request = {};
+    request[0] = 0xf7;
+    if (QueryFeature(request, mode)) {
+        settings.mouseOnline = mode[4] == 0;
+        settings.mouseBattery = settings.mouseOnline ? std::clamp(static_cast<int>(mode[2]), 0, 100)
+                                                     : -1;
+    }
+    Logger::Instance().Info(L"AM mouse settings read through the 2.4 GHz receiver");
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseDpi(MouseSettings& settings, int stage, int dpiValue) {
+    stage = std::clamp(stage, 0, 7);
+    dpiValue = std::clamp(dpiValue, 100, 26000);
+    MouseSettings updated = settings;
+    updated.currentDpi = stage;
+    updated.dpiX[stage] = dpiValue;
+    updated.dpiY[stage] = dpiValue;
+
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0x54;
+    request[2] = static_cast<std::uint8_t>(stage);
+    request[3] = static_cast<std::uint8_t>(updated.dpiStages);
+    AddChecksum(request, 7);
+    for (int index = 0; index < 8; ++index) {
+        const auto x = static_cast<unsigned int>(updated.dpiX[index]);
+        const auto y = static_cast<unsigned int>(updated.dpiY[index]);
+        request[8 + index * 2] = static_cast<std::uint8_t>(x & 0xffU);
+        request[9 + index * 2] = static_cast<std::uint8_t>((x >> 8U) & 0xffU);
+        request[24 + index * 2] = static_cast<std::uint8_t>(y & 0xffU);
+        request[25 + index * 2] = static_cast<std::uint8_t>((y >> 8U) & 0xffU);
+        request[40 + index * 3] = updated.dpiColors[index].r;
+        request[41 + index * 3] = updated.dpiColors[index].g;
+        request[42 + index * 3] = updated.dpiColors[index].b;
+    }
+    if (!RemoteWrite(request)) {
+        return false;
+    }
+    settings = updated;
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseReportRate(MouseSettings& settings, int reportRate) {
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        return false;
+    }
+    const int normalized = reportRate <= 125 ? 125 : reportRate <= 250 ? 250
+                                               : reportRate <= 500   ? 500
+                                                                   : 1000;
+    info[9] = normalized == 125 ? 8 : normalized == 250 ? 4 : normalized == 500 ? 2 : 1;
+    if (!WriteMouseInfo(info)) {
+        return false;
+    }
+    settings.reportRate = normalized;
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseUsbDebounce(MouseSettings& settings, int milliseconds) {
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        return false;
+    }
+    info[10] = static_cast<std::uint8_t>(std::clamp(milliseconds, 0, 20));
+    if (!WriteMouseInfo(info)) {
+        return false;
+    }
+    settings.usbDebounce = info[10];
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseLiftOffDistance(MouseSettings& settings, int distance) {
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        return false;
+    }
+    info[52] = static_cast<std::uint8_t>(std::clamp(distance, 1, 2));
+    if (!WriteMouseInfo(info)) {
+        return false;
+    }
+    settings.liftOffDistance = info[52];
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseMotionSync(MouseSettings& settings, bool enabled) {
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        return false;
+    }
+    info[63] = enabled ? 0 : 1;
+    if (!WriteMouseInfo(info)) {
+        return false;
+    }
+    settings.motionSync = enabled;
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseAngleSnap(MouseSettings& settings, bool enabled) {
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        return false;
+    }
+    info[53] = enabled ? 1 : 0;
+    if (!WriteMouseInfo(info)) {
+        return false;
+    }
+    settings.angleSnap = enabled;
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseRippleCorrection(MouseSettings& settings, bool enabled) {
+    std::array<std::uint8_t, kPayloadLength> info{};
+    if (!ReadMouseInfo(info)) {
+        return false;
+    }
+    info[12] = enabled ? 1 : 0;
+    if (!WriteMouseInfo(info)) {
+        return false;
+    }
+    settings.rippleCorrection = enabled;
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseFpsMode(MouseSettings& settings, bool enabled) {
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0x62;
+    request[1] = enabled ? 1 : 0;
+    AddChecksum(request, 7);
+    if (!RemoteWrite(request)) {
+        return false;
+    }
+    settings.fpsMode = enabled;
+    return true;
+}
+
+bool AngryMiaoReceiver::SetMouseDpiButton(MouseSettings& settings, bool enabled) {
+    std::array<std::uint8_t, kPayloadLength> request{};
+    request[0] = 0x63;
+    request[1] = enabled ? 1 : 0;
+    AddChecksum(request, 7);
+    if (!RemoteWrite(request)) {
+        return false;
+    }
+    settings.dpiButton = enabled;
+    return true;
+}
+
 bool AngryMiaoReceiver::ReadLightingState() {
     std::array<std::uint8_t, kPayloadLength> request{};
     request[0] = 0x88;

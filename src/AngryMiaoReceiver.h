@@ -12,6 +12,26 @@ namespace lightctrl {
 
 class AngryMiaoReceiver final {
 public:
+    struct MouseSettings {
+        std::array<int, 8> dpiX{};
+        std::array<int, 8> dpiY{};
+        std::array<RgbColor, 8> dpiColors{};
+        int currentDpi{};
+        int dpiStages{8};
+        int reportRate{1000};
+        int usbDebounce{3};
+        int wirelessDebounce{1};
+        int bluetoothDebounce{1};
+        int liftOffDistance{1};
+        bool motionSync{true};
+        bool angleSnap{};
+        bool rippleCorrection{};
+        bool fpsMode{};
+        bool dpiButton{true};
+        int mouseBattery{-1};
+        bool mouseOnline{};
+    };
+
     AngryMiaoReceiver() = default;
     ~AngryMiaoReceiver();
 
@@ -21,6 +41,16 @@ public:
     bool Open(bool snapshotLighting = true);
     void Close(bool restoreLighting = true);
     bool SetColor(RgbColor color);
+    bool ReadMouseSettings(MouseSettings& settings);
+    bool SetMouseDpi(MouseSettings& settings, int stage, int dpi);
+    bool SetMouseReportRate(MouseSettings& settings, int reportRate);
+    bool SetMouseUsbDebounce(MouseSettings& settings, int milliseconds);
+    bool SetMouseLiftOffDistance(MouseSettings& settings, int distance);
+    bool SetMouseMotionSync(MouseSettings& settings, bool enabled);
+    bool SetMouseAngleSnap(MouseSettings& settings, bool enabled);
+    bool SetMouseRippleCorrection(MouseSettings& settings, bool enabled);
+    bool SetMouseFpsMode(MouseSettings& settings, bool enabled);
+    bool SetMouseDpiButton(MouseSettings& settings, bool enabled);
 
     [[nodiscard]] bool IsOpen() const noexcept { return handle_ != INVALID_HANDLE_VALUE; }
     [[nodiscard]] const std::wstring& ProductName() const noexcept { return productName_; }
@@ -47,6 +77,13 @@ private:
     bool SendFeature(const std::array<std::uint8_t, kPayloadLength>& payload);
     bool QueryFeature(std::array<std::uint8_t, kPayloadLength> request,
                       std::array<std::uint8_t, kPayloadLength>& response);
+    bool RemoteRead(const std::array<std::uint8_t, kPayloadLength>& command,
+                    std::array<std::uint8_t, kPayloadLength>& response);
+    bool RemoteWrite(const std::array<std::uint8_t, kPayloadLength>& command);
+    bool WaitRemoteStatus(bool waitForRead,
+                          std::array<std::uint8_t, kPayloadLength>* response = nullptr);
+    bool ReadMouseInfo(std::array<std::uint8_t, kPayloadLength>& response);
+    bool WriteMouseInfo(const std::array<std::uint8_t, kPayloadLength>& response);
     bool ReadLightingState();
     bool ApplyLightingState(const LightingState& state, bool updateChargingSwitch);
     bool RestoreLightingState();

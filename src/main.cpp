@@ -233,6 +233,53 @@ int RunReceiverSelfTest(int seconds) {
     return 0;
 }
 
+int RunMouseSettingsTest(const std::filesystem::path& outputPath, bool withEngine = false) {
+    std::optional<SyncEngine> engine;
+    bool controlReady = true;
+    if (withEngine) {
+        engine.emplace(Settings::Load());
+        engine->Start();
+        Sleep(500);
+        controlReady = engine->BeginReceiverControl();
+        Sleep(100);
+    }
+    AngryMiaoReceiver receiver;
+    AngryMiaoReceiver::MouseSettings settings;
+    const bool opened = controlReady && receiver.Open(false);
+    const bool ready = opened && receiver.ReadMouseSettings(settings);
+
+    std::ostringstream json;
+    json << "{\n"
+         << "  \"ready\": " << (ready ? "true" : "false") << ",\n"
+         << "  \"online\": " << (settings.mouseOnline ? "true" : "false") << ",\n"
+         << "  \"battery\": " << settings.mouseBattery << ",\n"
+         << "  \"currentDpiStage\": " << settings.currentDpi << ",\n"
+         << "  \"dpi\": [";
+    for (std::size_t index = 0; index < settings.dpiX.size(); ++index) {
+        json << (index == 0 ? "" : ", ") << settings.dpiX[index];
+    }
+    json << "],\n"
+         << "  \"reportRate\": " << settings.reportRate << ",\n"
+         << "  \"usbDebounce\": " << settings.usbDebounce << ",\n"
+         << "  \"liftOffDistance\": " << settings.liftOffDistance << ",\n"
+         << "  \"motionSync\": " << (settings.motionSync ? "true" : "false") << ",\n"
+         << "  \"angleSnap\": " << (settings.angleSnap ? "true" : "false") << ",\n"
+         << "  \"rippleCorrection\": " << (settings.rippleCorrection ? "true" : "false") << ",\n"
+         << "  \"fpsMode\": " << (settings.fpsMode ? "true" : "false") << ",\n"
+         << "  \"dpiButton\": " << (settings.dpiButton ? "true" : "false") << ",\n"
+         << "  \"error\": " << JsonString(receiver.LastError()) << "\n"
+         << "}\n";
+    receiver.Close(false);
+    if (engine) {
+        engine->EndReceiverControl();
+        engine->Stop();
+    }
+    if (!WriteUtf8(outputPath, json.str())) {
+        return 2;
+    }
+    return ready ? 0 : 6;
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
@@ -275,6 +322,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             }
         }
         result = RunReceiverSelfTest(std::clamp(seconds, 1, 120));
+    } else if (arguments.size() >= 2 &&
+               (arguments[1] == L"--mouse-settings-test" ||
+                arguments[1] == L"--engine-mouse-settings-test")) {
+        const std::filesystem::path output = arguments.size() >= 3
+                                                 ? std::filesystem::path(arguments[2])
+                                                 : std::filesystem::current_path() /
+                                                       L"LightController-mouse-settings.json";
+        result = RunMouseSettingsTest(output, arguments[1] == L"--engine-mouse-settings-test");
     } else {
         const bool background = std::find(arguments.begin(), arguments.end(), L"--background") !=
                                 arguments.end();
